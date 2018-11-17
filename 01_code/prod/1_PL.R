@@ -33,16 +33,17 @@ start_time<-Sys.time()
 curs <- c("USDJPY","GBPUSD","USDCHF","USDCAD","NZDUSD","AUDUSD","XAUUSD","EURUSD")
 options(scipen=999)
 pipsize<-0.0001
-SL_vec<-c(20)
-PF_vec<-c(2)
+SL_vec<-c(15)
+PF_vec<-c(1)
 SPREAD_VAL <- c(2)
 MAX_PERIOD<-50
 N <- 5e6 #-- Number of columns to read
 
 #-- Read the minute data, skip the first few entries
 #dt_min<-fread(file="df_xts_r.csv",nrows = (1e3)+N)
-dt_min<-fread(file=paste0(data_input_dir,"dt_all_min.csv"),nrows = (1e3)+N)
+#dt_min<-fread(file=paste0(data_input_dir,"dt_all_min.csv"),nrows = (1e3)+N)
 #dt_min<-fread(file=paste0(data_input_dir,"dt_all_min.csv"),nrows = (100801))
+dt_min<-fread(file=paste0(data_input_dir,"dt_all_min.csv"))
 
 #,colClasses = list(character = c("Time"), numeric = c("Open","High","Low","Close")))
 
@@ -78,16 +79,17 @@ inds <- inds[2:length(inds)]
 #-- Loop over the SL and PF
 for(SL_VAL in SL_vec)
 {
-  
+  #SL_VAL <- 20
   for(PF in PF_vec)
   {
+    #PF <-1
     dt_results_all <- data.table(Time=dt_min[inds,Time])
     dt_results_all$Time <- as.character(dt_results_all$Time)
     for (curr in curs)
       {
 
       #curr <- "USDJPY"
-      
+      #curr="EURUSD"
             if(grepl("JPY",curr) | grepl("XAU",curr))
       {
         pipsize <-0.01
@@ -109,7 +111,7 @@ for(SL_VAL in SL_vec)
       
     print(paste0("SL:",SL/pipsize))
     print(paste0("PF:",PF))
-    print(curr)
+    cat(paste0("\n\n#################\n\n",curr,"\n\n"))
     #-- Results table
     dt_results <- data.table(Time=dt_min[inds,Time])
     dt_results[,paste0("buy_profit_",curr):=integer(length(inds))][,paste0("buy_loss_",curr):=integer(length(inds))][,paste0("sell_profit_",curr):=integer(length(inds))][,paste0("sell_loss_",curr):=integer(length(inds))]
@@ -128,7 +130,7 @@ for(SL_VAL in SL_vec)
       set(dt_results,i,5L,dt_min[(inds[i]+1):inds[i+MAX_PERIOD],.(get(paste0("High_",curr)))][V1>(dt_min[inds[i],get(paste0("Close_",curr))]-SPREAD+SL),which=T][1])
       if(i %% 1000 ==0)
       {  
-        print(paste0(round(100*i/length(inds),1)," %"))
+        cat("\r",paste0(round(100*i/length(inds),1)," %"))
       }
       
       i<-i+1L

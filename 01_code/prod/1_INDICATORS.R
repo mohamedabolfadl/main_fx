@@ -29,19 +29,13 @@ COMPUTE_SRs <- TRUE
 N <- 5e6 #-- Number of columns to read
 
 #-- Read the minute data, skip the first few entries
-#dt_min<-fread(file="df_xts_r.csv",nrows = (1e3)+N)
-#df_xts_r<-fread(file=paste0(data_input_dir,"dt_all_min.csv"),nrows = (1e3)+N)
 df_xts_r<-fread(file=paste0(data_input_dir,"dt_all_min.csv"))
 
 
-#head(df_xts_r)
+
+#-- Close USDJPY 29.11.2013 19:59:00 is 102.465
 
 
-#df_xts_r<-fread(file=paste0(data_input_dir,"dt_dukascopy.csv"),nrows = (1e3)+N,colClasses = list(character = c("Time"), numeric = c("Open","High","Low","Close")))
-#df_xts_r<-fread(file="df_xts_r.csv")
-
-#-- For getting support and resistance
-#MAX_PERIOD<-24 
 
 #-- Removing "T" and "R" from the Time column and converting the time column to Date
 #df_xts_r[,Time:=gsub("T"," ",Time)][,Time:=gsub("Z","",Time)][,Time:=as.POSIXct(Time, format = "%Y-%m-%d %H:%M:%S")]
@@ -54,6 +48,11 @@ i<-1
 
 for (cur in curs)
 {
+  
+  cat(paste0("Reading ",cur,"\n\n"))
+  
+  
+  
   #-- Select columns of the current curr
   cols <- c("Time",names(df_xts_r)[grepl(cur,names(df_xts_r))])
     dt_sell <- df_xts_r[,..cols]
@@ -173,6 +172,10 @@ dt_results_all<-dt_results_all[1e3:nrow(dt_results_all),]
 
 
 dt_results_all$index <- as.character(dt_results_all$index)
+
+#-- Must be 102.465
+dt_results_all[index=="2013-11-29 19:59:00",USDJPY_Close]
+
 
 fwrite(dt_results_all,paste0(data_intermediate_dir,"dt_with_indicators.csv"))
 

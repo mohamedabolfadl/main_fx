@@ -24,7 +24,7 @@ i<- 1
 for (cur in curs)
 {
   
-  
+  cat(paste0("Reading ",cur,"\n\n"))
   file_list <- list.files(paste0(data_input_dir,"duksacopy/",cur)) 
   file_list <- paste0(paste0(data_input_dir,"duksacopy/",cur,"/"),file_list)
   mylist <- lapply(file_list, fread)
