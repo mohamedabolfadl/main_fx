@@ -30,7 +30,9 @@ N <- 5e6 #-- Number of columns to read
 
 #-- Read the minute data, skip the first few entries
 #dt_min<-fread(file="df_xts_r.csv",nrows = (1e3)+N)
-df_xts_r<-fread(file=paste0(data_input_dir,"dt_all_min.csv"),nrows = (1e3)+N)
+#df_xts_r<-fread(file=paste0(data_input_dir,"dt_all_min.csv"),nrows = (1e3)+N)
+df_xts_r<-fread(file=paste0(data_input_dir,"dt_all_min.csv"))
+
 
 #head(df_xts_r)
 

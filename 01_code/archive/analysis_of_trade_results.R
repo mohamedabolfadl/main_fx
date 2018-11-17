@@ -4,7 +4,7 @@
 rm(list=ls())
 
 library(data.table)
-
+library(plotly)
 
 
 data_output_dir<-"02_data/output/"
@@ -52,3 +52,17 @@ res[,trades:=abs(BUY_RES_USDJPY)+
 mean_trades <- res[,(avg_trades_per_per=sum(trades)),by=ret_per]
 
 hist(mean_trades$V1)
+
+
+
+
+#plot_ly(data=mean_trades,x=~ret_per,y=~V1,type="scatter",mode="lines")
+plot_ly(data=mean_trades,x=~ret_per,y=~V1)
+
+
+
+
+
+
+
+

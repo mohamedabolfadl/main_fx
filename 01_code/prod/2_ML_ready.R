@@ -49,6 +49,8 @@ LIMIT_TIME_TRADE<- FALSE # Limit the hours into London/US times
 #dt_ind <- fread(paste0(data_intermediate_dir,"dt_with_indicators.csv"))
 dt_ind <- fread(paste0(data_intermediate_dir,"dt_with_indicators.csv"))
 
+
+
 if("index" %in% names(dt_ind))
 {
   setnames(dt_ind,"index","Time")
