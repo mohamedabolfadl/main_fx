@@ -539,7 +539,7 @@ classif_learners = all_learners[grepl("^classif",class) & installed==T & prob==T
                                   !(class %in% c("classif.rFerns","classif.rknn","classif.RRF","classif.rrlda","classif.sda","classif.knn","classif.LiblineaRL1L2SVC")) ,class]
 
 
-classif_learners<-c("classif.xgboost","classif.glmnet")
+#classif_learners<-c("classif.xgboost","classif.glmnet")
 
 #fwrite(data.table(classifiers=classif_learners),data_output_dir+"valid_classifiers.csv")
 
