@@ -37,16 +37,16 @@ config_file <- data.table(
   SL = 15, # Stop loss
   PF = 1,  # Profit factor
   SPREAD = 3, # Spread, make sure there is a file with the specified spread
-  indicator_filter = c("EMA","TMS","SMA","atr","BAR_DIR"),
+  indicator_filter = c("EMA","TMS","SMA","atr","dist","RSI","williams"),
   indicator_pair_filter = c("AND"),
   pair_filter = c("JPY","XAU"),
   preprocess_steps = c("center","scale"),
   test_portion = 0.3, # Out of sample test part for final evaluation
   window_type =  "FixedWindowCV", #"GrowingWindowCV",
   initial.window = 1e4,    # Window size for training
-  horizon = 1e3, # Future window for testing
+  horizon = 1e4, # Future window for testing
   initial.window_stack = 5e3,    # Window size for training
-  horizon_stack = 1e3, # Future window for testing
+  horizon_stack = 1e4, # Future window for testing
   REMOVE_FAST_WINS = T, # Flag to remove the positive trades which are finished in less than MIN_TRADE_TIME
   MIN_TRADE_TIME = 15,
   CORRELATION_FEATURE_SELECTION = T, # Flag whether to filter out the highly correlated features
@@ -512,6 +512,12 @@ dt_test <- dt_sel[floor(nrow(dt_sel)*(1-test_ratio)):nrow(dt),]
 dt_sel <- dt_sel[1:(floor(nrow(dt_sel)*(1-test_ratio))-1),]
 
 
+#-- Remove tests since we are not validating at this point
+rm(dt_test)
+rm(tmp)
+rm(dt)
+rm(dt_feature_part)
+rm(dt_features)
 
 #------------------------------------------------------------#
 ################## CREATE MLR TASK ##########################
@@ -528,23 +534,36 @@ models_with_performance_issues <- c("classif.extraTrees","classif.fdausc.glm","c
 #-- Choose the classifiers
 all_learners<-as.data.table(listLearners())
 
-classif_learners = all_learners[grepl("^classif",class) & installed==T & prob==T   &!(class %in% models_with_performance_issues) &!(class %in% c("classif.rFerns","classif.rknn","classif.RRF","classif.rrlda","classif.sda",
-                                                                                                                                                                               "classif.clusterSVM","classif.dcSVM","classif.fnn","classif.gaterSVM","classif.geoDA",
-                                                                                                                                                                               "classif.knn","classif.LiblineaRL1L2SVC")) ,class]
-
-fwrite(data.table(classifiers=classif_learners),data_output_dir+"valid_classifiers.csv")
-
-lrnrs = lapply(classif_learners,makeLearner,predict.type="prob")
-
-print(length(classif_learners))
+classif_learners = all_learners[grepl("^classif",class) & installed==T & prob==T   &
+                                  !(class %in% models_with_performance_issues) &
+                                  !(class %in% c("classif.rFerns","classif.rknn","classif.RRF","classif.rrlda","classif.sda","classif.knn","classif.LiblineaRL1L2SVC")) ,class]
 
 
-curr_model = "SELL_RES_USDJPY"
-setnames(dt_sel,curr_model,"TARGET")
+classif_learners<-c("classif.xgboost","classif.glmnet")
+
+#fwrite(data.table(classifiers=classif_learners),data_output_dir+"valid_classifiers.csv")
+
+
+
+
+for (curr_model in unique(config_file$instruments))
+{
+
+  
+  cat("\n########  "+curr_model+"   ############\n")
+  
+dt_curr<-  copy(dt_sel)
+  lrnrs = lapply(classif_learners,makeLearner,predict.type="prob")
+  
+  print(length(classif_learners))
+  
+#  curr_model = "SELL_RES_USDJPY"
+setnames(dt_curr,curr_model,"TARGET")
 
 feats_and_target <- c(feat_cols,"TARGET")
-dt_train <- dt_sel[,..feats_and_target]
+dt_train <- dt_curr[,..feats_and_target]
 
+rm(dt_curr)
 #-- Get only non NA rows
 dt_train <- na.omit(dt_train)
 
@@ -565,7 +584,7 @@ print(bmr)
 
 #-- Get the iteration results and store them
 res <- as.data.table(bmr)
-fwrite(res,data_output_dir+"classif_res_"+Sys.Date()+".csv")
+fwrite(res,data_output_dir+curr_model+"/performance_iterations_"+Sys.Date()+".csv")
 
 
 #-- Get the mean and variance of the auc
@@ -574,7 +593,7 @@ eta_val = 0.0001
 res_sharpe<-merge(res[,.(stdev=sqrt(var(auc))),by="learner.id"],res[,.(mean_v=mean(auc)),by="learner.id"])
 res_sharpe[,sharpe:=mean_v/stdev][order(-sharpe)]
 res_sharpe<-res_sharpe[order(-sharpe)]
-fwrite(res_sharpe,data_output_dir+"classif_res_sharpe_"+Sys.Date()+".csv")
+fwrite(res_sharpe,data_output_dir+curr_model+"/res_sharpe_"+Sys.Date()+".csv")
 
 
 
@@ -590,16 +609,29 @@ data_baselearners[,id:=NULL]
 dt_train_cor <- data_baselearners[,truth:=NULL]
 cr<-as.data.table(cor(dt_train_cor))
 cr$learner.id <- names(cr)
+fwrite(cr,data_output_dir+curr_model+"/correlation_matrix_"+Sys.Date()+".csv")
+fwrite(config_file,data_output_dir+curr_model+"/config_file_"+Sys.Date()+".csv")
+
+cat("\n######################################\n")
+
+
+#res_sharpe[,.(learner.id,sharpe)]
+
+#-- Get performance matrix for easy matrix multiplication with the correlation matrix
+##perf_mat <- res_sharpe$sharpe %*% t(res_sharpe$sharpe)
+#perf_mat <-as.data.table(perf_mat)
+#names(perf_mat)<-as.character(res_sharpe$learner.id)
+
+
+}
 
 
 
-res_sharpe[,.(learner.id,sharpe)]
 
-perf_mat <- res_sharpe$sharpe %*% t(res_sharpe$sharpe)
-perf_mat <-as.data.table(perf_mat)
 
-names(perf_mat)<-as.character(res_sharpe$learner.id)
 
+if("STACK"!="STACK")
+  {
 bst_learners_stack <- unique(c("truth",as.vector(res_sharpe[order(-sharpe)][,learner.id])[seq(1,2)],as.vector(res_sharpe[order(-mean_v)][,learner.id])[seq(1,2)]))
 dt_train <- data_baselearners[,..bst_learners_stack]
 #-- Classifier task
@@ -613,7 +645,7 @@ rsmpl_desc_stack = makeResampleDesc(method=wind,initial.window=initial.window_st
 bmr_stack<-benchmark(lrnrs_stack,tsk_stack,rsmpl_desc,measures = auc)
 
 
-
+}
 
 
 
