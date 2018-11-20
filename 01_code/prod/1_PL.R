@@ -33,9 +33,9 @@ start_time<-Sys.time()
 curs <- c("USDJPY","GBPUSD","USDCHF","USDCAD","NZDUSD","AUDUSD","XAUUSD","EURUSD")
 options(scipen=999)
 pipsize<-0.0001
-SL_vec<-c(15)
+SL_vec<-c(10,20,25)
 PF_vec<-c(1)
-SPREAD_VAL <- c(2)
+SPREAD_VAL <- c(3)
 MAX_PERIOD<-50
 N <- 5e6 #-- Number of columns to read
 
