@@ -38,14 +38,14 @@ data_intermediate_dir<-"02_data/intermediate/"
 #------------------------------------------------------------#
 
 config_file <- data.table(
-  instruments = c("BUY_RES_AUDUSD","SELL_RES_AUDUSD"), # Which models are to be trained in this script
+  instruments = c("BUY_RES_USDCHF","SELL_RES_USDCHF"), # Which models are to be trained in this script
   SL = 15, # Stop loss
   PF = 1,  # Profit factor
   SPREAD = 3, # Spread, make sure there is a file with the specified spread
   #indicator_filter = c("EMA","TMS","SMA","atr","dist","RSI","williams"),
   indicator_filter = c("EMA","TMS","SMA","atr","RSI","williams"),
   indicator_pair_filter = c("AND"),
-  pair_filter = c("AUD","XAU"),
+  pair_filter = c("CHF","XAU"),
   preprocess_steps = c("center","scale"),
   test_portion = 0.3, # Out of sample test part for final evaluation
   window_type =  "FixedWindowCV", #"GrowingWindowCV",
@@ -635,7 +635,7 @@ cat("\n######################################\n")
 }
 
 
-#parallelStop()
+parallelStop()
 
 
 
