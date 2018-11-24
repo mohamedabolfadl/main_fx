@@ -32,6 +32,10 @@ data_output_dir<-"02_data/output/"
 data_input_dir<-"02_data/input/"
 data_intermediate_dir<-"02_data/intermediate/"
 
+
+
+JUST_CHECKING <- T
+
 #parallelStartSocket(2)
 
 #-- Linux
@@ -52,20 +56,23 @@ config_file <- data.table(
   PF = 1,  # Profit factor
   SPREAD = 3, # Spread, make sure there is a file with the specified spread
   #indicator_filter = c("EMA","TMS","SMA","atr","dist","RSI","williams"),
-  indicator_filter = c("EMA","TMS","SMA","atr","RSI","williams"),
+  indicator_filter = c("EMA","TMS","SMA","atr","RSI"),
   indicator_pair_filter = c("AND"),
-  pair_filter = c("AUD","XAU"),
-  preprocess_steps = c("center","scale"),
+  pair_filter = c("AUD","XAU","EUR","NZD","JPY","CAD","CHF"),
+#  pair_filter = c("AUD","NZD","JPY"),
+  SCALE_AND_MEAN_FLAG = F,
+  #preprocess_steps = c("center","scale"),
+  preprocess_steps = c(""),
   test_portion = 0.3, # Out of sample test part for final evaluation
-  window_type =  "FixedWindowCV", #"GrowingWindowCV",
+  window_type =  "FixedWindowCV", #"GrowingWindowCV", "FixedWindowCV"
   initial.window = 1e4,    # Window size for training
-  horizon = 1e4, # Future window for testing
-  initial.window_stack = 5e3,    # Window size for training
+  horizon = 1e3, # Future window for testing
+  initial.window_stack = 1e4,    # Window size for training
   horizon_stack = 1e4, # Future window for testing
   REMOVE_FAST_WINS = T, # Flag to remove the positive trades which are finished in less than MIN_TRADE_TIME
   MIN_TRADE_TIME = 15,
   CORRELATION_FEATURE_SELECTION = T, # Flag whether to filter out the highly correlated features
-  CORRELATION_THRESHOLD = 0.9, # Filter to indicate the maximum correlation between indicators to be included in the training
+  CORRELATION_THRESHOLD = 0.95, # Filter to indicate the maximum correlation between indicators to be included in the training
   READ_SELECTED_FEATURES = F,
   returns_period = "week", #"month","day" defines the period of aggregating the returns
   WRITE_FLAG = F
@@ -76,6 +83,7 @@ all_pairs <- c("EURUSD","GBPUSD","AUDUSD","USDJPY","USDCHF","NZDUSD","XAUUSD","U
 instruments <- data.table(currs = unique(config_file$instruments))
 
 
+SCALE_AND_MEAN_FLAG <- config_file$SCALE_AND_MEAN_FLAG[1]
 indicator_filter = unique(config_file[!is.na(indicator_filter),indicator_filter]) 
 indicator_pair_filter = unique(config_file[,indicator_pair_filter])
 pair_filter = unique(config_file[,pair_filter])
@@ -88,7 +96,7 @@ READ_SELECTED_FEATURES <- config_file$READ_SELECTED_FEATURES[1]
 WRITE_FLAG <- config_file$WRITE_FLAG[1]
 SPREAD <- config_file$SPREAD[1] # Spread, make sure there is a file with the specified spread
 SL <- config_file$SL[1]
-PF <- config_file$PF[1]
+PF <<- config_file$PF[1]
 test_ratio <- config_file$test_portion[1]
 initial.window<-config_file$initial.window[1]
 horizon <- config_file$horizon[1]
@@ -98,29 +106,70 @@ wind <- config_file$window_type[1]
 REMOVE_FAST_WINS<-config_file$REMOVE_FAST_WINS[1]
 CORRELATION_THRESHOLD <- config_file$CORRELATION_THRESHOLD[1]
 
+
+
 #------------------------------------------------------------#
 ############### DEFINE THE FUNCTIONS #########################
 #------------------------------------------------------------#
-# sharpe_ratio = function(task, model, pred, feats, extra.args) {
-#   
-#   predTable <- as.data.table(pred)
-#   predTable <- predTable[response==T]
-#   predTable[,equity:=2*(as.numeric(truth)-1.5)][equity>0,equity:=PF][,equity:=cumsum(equity)][,drawdown:=cummax(equity)][,drawdown:=(drawdown-equity) ]
-#   if(nrow(predTable)>5)
-#   {  
-#     predTable[,equity:=2*(as.numeric(truth)-1.5)][equity>0,equity:=PF][,equity:=cumsum(equity)][,drawdown:=cummax(equity)][,drawdown:=(drawdown-equity) ]
-#     (predTable[nrow(predTable), equity])/((1+max(predTable$drawdown)))
-#   }else{
-#     
-#     (0)
-#   }
-# }
-# sharpe_ratio = makeMeasure(
-#   id = "prob_pos_week", name = "prob_pos_week",
-#   properties = c("classif", "classif.multi", "req.pred",
-#                  "req.truth"),
-#   minimize = FALSE,  fun = sharpe_ratio
-# )
+prob_pos_ret = function(task, model, pred, feats, extra.args) {
+
+  pred <- as.data.table(pred)
+setnames(pred,c("truth","id"),c("TARGET","index"))
+  #  print(head(pred))
+  
+    step <-0.01
+  th<-step
+  bst_sharpe <- -999
+  bst_thr <- 0.01
+  while(th<0.95)
+  {
+    dt_curr<-copy(pred)
+    dt_curr[,decision:=as.numeric(prob.1>th)]
+    dt_curr <- dt_curr[decision>0.5]
+    
+    
+ #   print("PF = "+ PF)
+#print("Time lut")
+#print(head(dt_time_lut))
+
+    ret_varg<-get_sharpe(dt_curr,dt_time_lut,PF)
+    if((ret_varg[[2]]==0 & ret_varg[[3]]==0))
+    {
+      curr_sharpe<-0
+    }else{
+      curr_sharpe <-1-pnorm(0,ret_varg[[2]],sqrt(ret_varg[[3]]))
+    }
+    if(curr_sharpe>bst_sharpe)
+    {
+      bst_sharpe<-curr_sharpe
+      bst_thr <- th
+      bst_mean_ret <- ret_varg[[2]]
+      bst_var_ret <- (sqrt(ret_varg[[3]]))
+    }
+    th<-th+step
+  }
+  
+  
+  return(bst_sharpe)
+  
+  predTable <- as.data.table(pred)
+  predTable <- predTable[response==T]
+  predTable[,equity:=2*(as.numeric(truth)-1.5)][equity>0,equity:=PF][,equity:=cumsum(equity)][,drawdown:=cummax(equity)][,drawdown:=(drawdown-equity) ]
+  if(nrow(predTable)>5)
+  {
+    predTable[,equity:=2*(as.numeric(truth)-1.5)][equity>0,equity:=PF][,equity:=cumsum(equity)][,drawdown:=cummax(equity)][,drawdown:=(drawdown-equity) ]
+    (predTable[nrow(predTable), equity])/((1+max(predTable$drawdown)))
+  }else{
+
+    (0)
+  }
+}
+prob_pos_ret = makeMeasure(
+  id = "prob_pos_week", name = "prob_pos_week",
+  properties = c("classif", "classif.multi", "req.pred",
+                 "req.truth"),
+  minimize = FALSE,  fun = prob_pos_ret
+)
 
 
 
@@ -463,11 +512,14 @@ getBestThresh <- function(dt)
 #-- Read the main ML file
 dt<-fread(paste0(data_intermediate_dir,"ML_SL_",SL,"_PF_",PF,"_SPREAD_",SPREAD,"_ALL.csv"))
 
+
+
+
 #-- Attach the index column
 dt[,index:= seq(1,nrow(dt))]
 
 #-- Create the index, time lookup table
-dt_time_lut <- dt[,.(index,Time)]
+dt_time_lut <<- dt[,.(index,Time)]
 
 
 
@@ -599,7 +651,7 @@ if(CORRELATION_FEATURE_SELECTION)
   cols <- names(dt_features)
   dt_features[,(cols):=lapply(.SD,as.numeric),.SDcols = cols]
   #dt_features <- sapply( dt_features, as.numeric )
-  cr <- cor(dt_features[sample(seq(2e4,nrow(dt_features)),5e3),], use="complete.obs")
+  cr <- cor(na.omit(dt_features[sample(seq(1e4,nrow(dt_features)),5e3),]), use="complete.obs")
   
   highly_correlated_features<-caret::findCorrelation(x=cr,cutoff=CORRELATION_THRESHOLD)
   
@@ -625,7 +677,7 @@ if(CORRELATION_FEATURE_SELECTION)
 
 
 
-if(length(preprocess_steps)>0)
+if(length(preprocess_steps)>0 & SCALE_AND_MEAN_FLAG ==T)
 {
   dt_feature_part <- dt_sel[,..feat_cols]
   
@@ -687,7 +739,6 @@ fwrite(all_mdls,data_output_dir+"models_per_pair.csv")
 #--------------------------------------------------------#
 
 
-
 pairs <- unique(config_file$instruments)
 
 
@@ -697,8 +748,11 @@ curr_model <- pairs[1]
 dt_models<-fread(data_output_dir+curr_model+"/top_models.csv")
 classif_learners<-unique(dt_models$models)
 dt_curr<-  copy(dt_sel)
-lrnrs = lapply(classif_learners,makeLearner,predict.type="prob")
 
+if(!JUST_CHECKING)
+  {
+lrnrs = lapply(classif_learners,makeLearner,predict.type="prob")
+}
 
 #  curr_model = "SELL_RES_USDJPY"
 setnames(dt_curr,curr_model,"TARGET")
@@ -756,13 +810,23 @@ ps = makeParamSet(
 # )
 
 #-- Set the maximum number of iterations
-ctrl = makeTuneControlRandom(maxit = 10L)
+#ctrl = makeTuneControlRandom(maxit = 10L)
+ctrl = makeTuneControlGrid()
 
 #-- Tune the hyperparameters
 res = tuneParams(lrnr, task = tsk, resampling =
                    rsmpl_desc,
-                 par.set = ps, control = ctrl,measures = auc)
+                 par.set = ps, control = ctrl,measures = prob_pos_ret)
 
+
+
+
+
+
+
+
+if(F)
+{
 #-- Set the best parameters to the learner
 lrnr_best = setHyperPars(lrnr,par.vals=res$x)
 
@@ -795,140 +859,5 @@ res$x
 newlearnernnet <- setHyperPars(classif.lrn, par.vals = res$x)
 
 
-
-
-
-#------------------------------------------------------------#
-################## CREATE MLR TASK ##########################
-#------------------------------------------------------------#
-
-
-models_with_performance_issues <- c("classif.neuralnet","classif.ksvm","classif.extraTrees","classif.fdausc.glm","classif.fdausc.kernel","classif.fdausc.knn","classif.fdausc.np","classif.randomForestSRC","classif.featureless","classif.bartMachine","classif.blackboost","classif.cforest","classif.evtree","classif.gausspr","classif.rda")
-#already_tested <- c("classif.ctree","classif.h2o.randomForest","classif.naiveBayes","classif.C50","classif.IBk","classif.nnTrain","classif.ada","classif.J48","classif.JRip","classif.ksvm","classif.lqa","classif.binomial","classif.earth","classif.LiblineaRL2LogReg","classif.pamr","classif.extraTrees","classif.mda","classif.plsdaCaret","classif.h2o.glm","classif.mlp","classif.probit","classif.h2o.gbm","classif.nnet","classif.h2o.deeplearning","classif.neuralnet","classif.randomForest","classif.glmnet","classif.cvglmnet","classif.OneR","classif.ranger","classif.gamboost","classif.plr","classif.rotationForest","classif.gbm","classif.logreg","classif.multinom","classif.LiblineaRL1LogReg","classif.adaboostm1","classif.nodeHarvest","classif.PART","classif.saeDNN","classif.rpart","classif.dbnDNN","classif.svm","classif.qda","classif.xgboost","classif.glmboost")
-#classif_learners = all_learners[grepl("^classif",class) & installed==T & prob==T & !(class %in% already_tested)  &!(class %in% models_with_performance_issues) &!(class %in% c("classif.rFerns","classif.rknn","classif.RRF","classif.rrlda","classif.sda",
-#                                                                                                                                                                               "classif.clusterSVM","classif.dcSVM","classif.fnn","classif.gaterSVM","classif.geoDA",
-#                                                                                                                                                                               "classif.knn","classif.LiblineaRL1L2SVC")) ,class]
-
-
-#-- Choose the classifiers
-all_learners<-as.data.table(listLearners())
-
-classif_learners = all_learners[grepl("^classif",class) & installed==T & prob==T   &
-                                  !(class %in% models_with_performance_issues) &
-                                  !(class %in% c("classif.rFerns","classif.rknn","classif.RRF","classif.rrlda","classif.sda","classif.knn","classif.LiblineaRL1L2SVC")) ,class]
-
-
-
-
-
-#-- classif_learners<-c("classif.neuralnet")
-
-#fwrite(data.table(classifiers=classif_learners),data_output_dir+"valid_classifiers.csv")
-
-
-
-
-for (curr_model in unique(config_file$instruments))
-{
-  
-  
-  cat("\n########  "+curr_model+"   ############\n")
-  
-  dt_curr<-  copy(dt_sel)
-  lrnrs = lapply(classif_learners,makeLearner,predict.type="prob")
-  
-  print(length(classif_learners))
-  
-  #  curr_model = "SELL_RES_USDJPY"
-  setnames(dt_curr,curr_model,"TARGET")
-  
-  feats_and_target <- c(feat_cols,"TARGET")
-  dt_train <- dt_curr[,..feats_and_target]
-  
-  rm(dt_curr)
-  #-- Get only non NA rows
-  dt_train <- na.omit(dt_train)
-  
-  tsk <- makeClassifTask(id=curr_model,data=as.data.frame(dt_train), target="TARGET")
-  
-  #-- TO check what are the available measures
-  #listMeasures(tsk)
-  
-  #-- Make the resampling strategy
-  rsmpl_desc = makeResampleDesc(method=wind,initial.window=initial.window,horizon=horizon, skip =horizon)
-  
-  #-- Benchmark
-  bmr<-benchmark(lrnrs,tsk,rsmpl_desc,measures = auc)
-  
-  print(bmr)
-  
-  
-  
-  #-- Get the iteration results and store them
-  res <- as.data.table(bmr)
-  fwrite(res,data_output_dir+curr_model+"/performance_iterations_"+Sys.Date()+".csv")
-  
-  
-  #-- Get the mean and variance of the auc
-  eta_val = 0.0001
-  #res[,.(sharpe=mean(auc),eta_val=std(auc)),by="learner.id"]
-  res_sharpe<-merge(res[,.(stdev=sqrt(var(auc))),by="learner.id"],res[,.(mean_v=mean(auc)),by="learner.id"])
-  res_sharpe[,sharpe:=mean_v/stdev][order(-sharpe)]
-  res_sharpe<-res_sharpe[order(-sharpe)]
-  fwrite(res_sharpe,data_output_dir+curr_model+"/res_sharpe_"+Sys.Date()+".csv")
-  
-  
-  
-  predictions_str <- as.data.table(getBMRPredictions(bmr,as.df = T))
-  data_baselearners<-merge(dcast(data=predictions_str, id  ~  learner.id, value.var = "prob.1"),unique(predictions_str[,.(id,truth)],by=c("id","truth")))
-  rm(predictions_str)
-  
-  data_baselearners<- data_baselearners[order(id)]
-  data_baselearners[,id:=NULL]
-  
-  
-  
-  dt_train_cor <- data_baselearners[,truth:=NULL]
-  cr<-as.data.table(cor(dt_train_cor))
-  cr$learner.id <- names(cr)
-  fwrite(cr,data_output_dir+curr_model+"/correlation_matrix_"+Sys.Date()+".csv")
-  fwrite(config_file,data_output_dir+curr_model+"/config_file_"+Sys.Date()+".csv")
-  
-  cat("\n######################################\n")
-  
-  
-  #res_sharpe[,.(learner.id,sharpe)]
-  
-  #-- Get performance matrix for easy matrix multiplication with the correlation matrix
-  ##perf_mat <- res_sharpe$sharpe %*% t(res_sharpe$sharpe)
-  #perf_mat <-as.data.table(perf_mat)
-  #names(perf_mat)<-as.character(res_sharpe$learner.id)
-  
-  
 }
-
-
-#parallelStop()
-
-
-
-if("STACK"!="STACK")
-{
-  bst_learners_stack <- unique(c("truth",as.vector(res_sharpe[order(-sharpe)][,learner.id])[seq(1,2)],as.vector(res_sharpe[order(-mean_v)][,learner.id])[seq(1,2)]))
-  dt_train <- data_baselearners[,..bst_learners_stack]
-  #-- Classifier task
-  tsk_stack <- makeClassifTask(id=curr_model+"_stack",data=as.data.frame(dt_train), target="truth")
-  
-  classif_learners<-c("classif.glmnet")
-  #classif_learners<-unique(c("classif.glmnet",as.vector(res_sharpe[order(-sharpe)][,learner.id])[seq(1,5)],as.vector(res_sharpe[order(-mean_v)][,learner.id])[seq(1,5)]))
-  
-  lrnrs_stack = lapply(classif_learners,makeLearner,predict.type="prob")
-  rsmpl_desc_stack = makeResampleDesc(method=wind,initial.window=initial.window_stack,horizon=horizon_stack, skip =horizon)
-  bmr_stack<-benchmark(lrnrs_stack,tsk_stack,rsmpl_desc,measures = auc)
-  
-  
-}
-
-
-
 

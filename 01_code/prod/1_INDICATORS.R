@@ -173,6 +173,28 @@ dt_results_all<-dt_results_all[1e3:nrow(dt_results_all),]
 
 dt_results_all$index <- as.character(dt_results_all$index)
 
+################################################################
+############### GENERAL INDICATORS #############################
+################################################################
+
+
+#-- RSI average
+rsi_inds <- names(dt_results_all)[grepl("RSI$",names(dt_results_all))]
+
+
+
+
+for (rsi in rsi_inds)
+{
+  if(!grepl("^U",rsi))
+  {
+    curr
+    
+  }
+  
+}
+
+
 #-- Must be 102.465
 dt_results_all[index=="2013-11-29 19:59:00",USDJPY_Close]
 
