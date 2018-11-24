@@ -1,4 +1,8 @@
+#-- This script combines the training results of each pair to decide which are the best models to be used per pair
 
+#-- Usage
+# Input the total number of models to take from each pair
+# No specific input needed just run and get the results, just make sure that 3_MAIN_MULTIPLE is already run
 
 
 
@@ -9,6 +13,9 @@ rm(list=ls())
 
 set.seed(123)
 
+
+
+N_models <- 6
 
 
 library(data.table)
@@ -132,7 +139,8 @@ getPairs <- function(x)
 
 
 
-
+N_models_from_pairs <- N_models/2
+N_models_from_best <- N_models/2
 
 
 for(fold in folds)
@@ -161,10 +169,21 @@ for(fold in folds)
   cat(fold+"\n")
   res$model <- model_order
 pair_view <-getPairs(res) 
+
+
+
+
+uncorrelated_models <- unique(c(pair_view[1:ceiling(N_models_from_pairs/2),model_A],pair_view[1:ceiling(N_models_from_pairs/2),model_B]))
+top_models<-dt_sel[order( -get(fold) )][1:N_models_from_best,learner.id]
+
+total_models <- data.table(models=unique(c(uncorrelated_models,top_models)))
+print(top_models)
     cat(pair_view[1,]+"\n")
   cat("\n################\n\n")
   fwrite(pair_view,data_output_dir+fold+"/model_to_model_score.csv")
-}
+  fwrite(total_models,data_output_dir+fold+"/top_models.csv")
+  
+  }
 
 
 

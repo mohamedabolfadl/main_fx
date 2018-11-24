@@ -1,5 +1,12 @@
-#-- Train a single model on all the features (No feature selection)
 
+#-- Optimizes the parameters of each model for each pair
+
+
+
+
+
+
+rm(list=ls())
 
 
 
@@ -17,6 +24,8 @@ library(xgboost)
 library(crayon)
 library(plotly)
 library(caret)
+library(mlrHyperopt)
+
 library(parallelMap)
 #--- Directories
 data_output_dir<-"02_data/output/"
@@ -38,14 +47,14 @@ data_intermediate_dir<-"02_data/intermediate/"
 #------------------------------------------------------------#
 
 config_file <- data.table(
-  instruments = c("BUY_RES_USDCHF","SELL_RES_USDCHF"), # Which models are to be trained in this script
+  instruments = c("BUY_RES_AUDUSD","SELL_RES_AUDUSD"), # Which models are to be trained in this script
   SL = 15, # Stop loss
   PF = 1,  # Profit factor
   SPREAD = 3, # Spread, make sure there is a file with the specified spread
   #indicator_filter = c("EMA","TMS","SMA","atr","dist","RSI","williams"),
   indicator_filter = c("EMA","TMS","SMA","atr","RSI","williams"),
   indicator_pair_filter = c("AND"),
-  pair_filter = c("CHF","XAU"),
+  pair_filter = c("AUD","XAU"),
   preprocess_steps = c("center","scale"),
   test_portion = 0.3, # Out of sample test part for final evaluation
   window_type =  "FixedWindowCV", #"GrowingWindowCV",
@@ -112,6 +121,124 @@ CORRELATION_THRESHOLD <- config_file$CORRELATION_THRESHOLD[1]
 #                  "req.truth"),
 #   minimize = FALSE,  fun = sharpe_ratio
 # )
+
+
+
+#######  GET PARAMETER SEARCH SPACE ################
+
+getParamSearchSpace <- function(model)
+{
+  
+  
+  if(model=="classif.plsdaCaret")
+    
+  {
+    ps = makeParamSet(
+      makeIntegerParam("ncomp", lower = 1L, upper = 10L)#,
+      # makeDiscreteParam("probMethod", values=c("softmax","Bayes")),                            # Very slow
+      #  makeDiscreteParam("method", values=c("kernelpls","widekernelpls","simpls","oscorespls")) # Very slow
+    )
+    return(ps)
+  }
+  
+  if(model=="classif.pamr")
+  {
+    ps = makeParamSet(
+      makeIntegerParam("n.threshold", lower = 20L, upper = 40L),
+      makeNumericParam("offset.percent",lower=30,upper=70),
+      makeLogicalParam("scale.sd"),
+      makeLogicalParam("remove.zeros"),
+      makeDiscreteParam("sign.contrast", values=c("both","negative","positive"))#,                         
+      #    makeDiscreteParam("probMethod", values=c("softmax","Bayes"))#,                          
+      #    makeDiscreteParam("method", values=c("kernelpls","widekernelpls","simpls","oscorespls")) # very slow
+    )
+    return(ps)
+  }
+  
+  
+  
+  if(model=="classif.qda")
+  {
+    ps = makeParamSet(
+      makeNumericParam("nu",lower=2,upper=20),
+      makeDiscreteParam("method", values=c("moment","mle","mve","t")),   
+      makeDiscreteParam("predict.method", values=c("plug-in","predictive","debiased"))#,   
+    )
+    
+    return(ps)
+  }
+  
+  
+  if(model=="classif.glmnet")
+  {
+    
+    ps = makeParamSet(
+      makeNumericParam("alpha",lower=0,upper=1),
+      makeNumericParam("thresh",lower=-7,upper=2, trafo =    function(x) 10^x),
+      makeIntegerParam("nlambda", lower = 80L, upper = 120L)#,
+      #  makeNumericParam("lambda.min.ratio",lower=0,upper=1)
+    )
+    return(ps)
+    
+  }
+  
+  
+  if(model=="classif.svm")
+  {
+    
+    ps=makeParamSet(
+      makeNumericParam("nu", lower = -0.5, upper = 1.5),
+      makeNumericParam("cost", lower = 0, upper = 10)
+    )
+    
+    return(ps)
+    
+  }
+  
+  if(model=="classif.nnTrain")
+  {
+    
+  ps = makeParamSet(
+    makeIntegerVectorParam("hidden",len = 2,lower = 10,upper = 100),
+    makeDiscreteParam("activationfun", values=c("sigm","tanh")),
+    makeNumericParam("learningrate",lower=0,upper=2),
+    makeNumericParam("hidden_dropout",lower=0,upper=1),
+    makeIntegerParam("numepochs", lower = 2L, upper = 10L),
+    makeNumericParam("visible_dropout",lower=0,upper=1)
+  )
+  #[Tune] Result: hidden=55,56; activationfun=sigm; learningrate=1.91; hidden_dropout=0.404; numepochs=5; visible_dropout=0.775 : auc.test.mean=0.5410692
+  return(ps)
+  
+  }
+  
+  
+  
+  
+  if(model=="classif.h2o.deeplearning")
+  {
+    ps = makeParamSet(
+    makeIntegerVectorParam("hidden",len = 2,lower = 10,upper = 100),
+    #  makeDiscreteParam("activation", values=c("Rectifier")),
+    # makeNumericParam("l1",lower=0.001,upper=1),
+    #  makeNumericParam("l2",lower=0.001,upper=1),
+    # makeNumericParam("input_dropout_ratio",lower=0,upper=1),
+    #  makeNumericParam("rho",lower=0,upper=10),
+    makeNumericParam("epochs", lower = 8, upper = 20),
+    makeNumericParam("rate",lower=0,upper=1)#,
+    # makeLogicalParam("quiet_mode")
+  )
+  return(ps)
+  
+}
+
+  
+  
+  
+  
+  
+}
+
+
 
 get_sharpe=function(dt_curr,dt_time_lut_prediction_period,PF)
 {
@@ -525,6 +652,152 @@ rm(dt)
 rm(dt_feature_part)
 rm(dt_features)
 
+
+#--------------------------------------------------------#
+#######  Save the models used for all the pairs ##########
+#--------------------------------------------------------#
+
+
+all_pairs <- c("EURUSD","GBPUSD","AUDUSD","USDJPY","USDCHF","NZDUSD","USDCAD")
+
+pairs <- c("BUY_RES_"+all_pairs,"SELL_RES_"+all_pairs)
+#-- Load all the models
+
+i<-1
+for(pair in pairs)
+{
+  curr_model<-fread(data_output_dir+pair+"/top_models.csv")
+  curr_model$pair <- pair
+#  print(curr_model)
+  if(i==1)
+  {
+    all_mdls <- curr_model 
+  }else{
+    
+    all_mdls<-rbind(all_mdls,curr_model)
+  }
+  i<-i+1
+}
+
+fwrite(all_mdls,data_output_dir+"models_per_pair.csv")
+
+
+#--------------------------------------------------------#
+###############  READ BEST MODELS FOR THIS PAIR ##########
+#--------------------------------------------------------#
+
+
+
+pairs <- unique(config_file$instruments)
+
+
+curr_model <- pairs[1]
+
+
+dt_models<-fread(data_output_dir+curr_model+"/top_models.csv")
+classif_learners<-unique(dt_models$models)
+dt_curr<-  copy(dt_sel)
+lrnrs = lapply(classif_learners,makeLearner,predict.type="prob")
+
+
+#  curr_model = "SELL_RES_USDJPY"
+setnames(dt_curr,curr_model,"TARGET")
+
+feats_and_target <- c(feat_cols,"TARGET")
+dt_train <- dt_curr[,..feats_and_target]
+
+rm(dt_curr)
+#-- Get only non NA rows
+dt_train <- na.omit(dt_train)
+
+tsk <- makeClassifTask(id=curr_model,data=as.data.frame(dt_train), target="TARGET")
+#-- Make the resampling strategy
+rsmpl_desc = makeResampleDesc(method=wind,initial.window=initial.window,horizon=horizon, skip =horizon)
+
+
+
+
+
+#-- Hyperparameter optimization
+# based on https://www.kaggle.com/getting-started/42758
+
+#-- Check out the available parameters to tune
+a<-getParamSet("classif.h2o.deeplearning")
+#a$pars$
+
+
+#lrnr <- makeLearner("classif.svm",predict.type="prob")
+#lrnr <- makeLearner("classif.h2o.deeplearning",predict.type="prob")
+#lrnr <- makeLearner("classif.nnet",predict.type="prob")
+lrnr <- makeLearner("classif.plsdaCaret",predict.type="prob")
+
+ps = makeParamSet(
+  makeIntegerParam("ncomp", lower = 1L, upper = 10L)#,
+  # makeDiscreteParam("probMethod", values=c("softmax","Bayes")),                            # Very slow
+  #  makeDiscreteParam("method", values=c("kernelpls","widekernelpls","simpls","oscorespls")) # Very slow
+)
+
+
+
+
+# ps = makeParamSet(
+#   makeNumericParam("nu",lower=2,upper=20),
+#   makeNumericParam("nu",lower=2,upper=20),
+#   makeLogicalParam("remove.zeros"),
+#   makeIntegerParam("n.threshold", lower = 20L, upper = 40L),
+#   makeNumericParam("nu",lower=2,upper=20),
+#   makeIntegerParam("n.threshold", lower = 20L, upper = 40L),
+#   makeNumericParam("nu",lower=2,upper=20),
+#   makeLogicalParam("scale.sd"),
+#   makeLogicalParam("remove.zeros"),
+#   makeDiscreteParam("method", values=c("moment","mle","mve","t")),                         
+#   makeDiscreteParam("probMethod", values=c("softmax","Bayes")),                          
+#   makeDiscreteParam("method", values=c("kernelpls","widekernelpls","simpls","oscorespls")) # very slow
+# )
+
+#-- Set the maximum number of iterations
+ctrl = makeTuneControlRandom(maxit = 10L)
+
+#-- Tune the hyperparameters
+res = tuneParams(lrnr, task = tsk, resampling =
+                   rsmpl_desc,
+                 par.set = ps, control = ctrl,measures = auc)
+
+#-- Set the best parameters to the learner
+lrnr_best = setHyperPars(lrnr,par.vals=res$x)
+
+#-- Redo the predictions to get the probabilies
+res_pred <- resample(learner = lrnr_best, tsk,resampling = rsmpl_desc , measures = auc)
+
+#-- Parse the results
+preds <- as.data.table(res_pred$pred$data)
+preds <- preds[,.(id,prob.1,truth)]
+setnames(preds,c("id","prob.1","truth"),c("index","prediction","TARGET"))
+
+
+
+ret_var<-get_mean_returns_and_variance(preds,dt_time_lut,PF)
+
+cat(red("Probability of positive weekly returns = "+ round(100*(1-pnorm(0,ret_var[[1]]/ret_var[[2]])),2)+" mean returns = "+ret_var[[1]]+" std(returns) = "+ret_var[[2]]+"\n"))
+
+
+
+getParamSet(lrnr) # check the setting
+
+hyper.control <- makeHyperControl(
+  mlr.control = makeTuneControlRandom(maxit = 20L), #search strategy
+  resampling = rsmpl_desc, #resampling strategy
+  measures = auc) # measure to use (if you want to use more, than provide the measures with a list
+
+res <- hyperopt(tsk, learner = lrnr,
+                hyper.control = hyper.control)
+res$x
+newlearnernnet <- setHyperPars(classif.lrn, par.vals = res$x)
+
+
+
+
+
 #------------------------------------------------------------#
 ################## CREATE MLR TASK ##########################
 #------------------------------------------------------------#
@@ -557,104 +830,105 @@ classif_learners = all_learners[grepl("^classif",class) & installed==T & prob==T
 
 for (curr_model in unique(config_file$instruments))
 {
-
   
-cat("\n########  "+curr_model+"   ############\n")
   
-dt_curr<-  copy(dt_sel)
+  cat("\n########  "+curr_model+"   ############\n")
+  
+  dt_curr<-  copy(dt_sel)
   lrnrs = lapply(classif_learners,makeLearner,predict.type="prob")
   
   print(length(classif_learners))
   
-#  curr_model = "SELL_RES_USDJPY"
-setnames(dt_curr,curr_model,"TARGET")
-
-feats_and_target <- c(feat_cols,"TARGET")
-dt_train <- dt_curr[,..feats_and_target]
-
-rm(dt_curr)
-#-- Get only non NA rows
-dt_train <- na.omit(dt_train)
-
-tsk <- makeClassifTask(id=curr_model,data=as.data.frame(dt_train), target="TARGET")
-
-#-- TO check what are the available measures
-#listMeasures(tsk)
-
-#-- Make the resampling strategy
-rsmpl_desc = makeResampleDesc(method=wind,initial.window=initial.window,horizon=horizon, skip =horizon)
-
-#-- Benchmark
-bmr<-benchmark(lrnrs,tsk,rsmpl_desc,measures = auc)
-
-print(bmr)
-
-
-
-#-- Get the iteration results and store them
-res <- as.data.table(bmr)
-fwrite(res,data_output_dir+curr_model+"/performance_iterations_"+Sys.Date()+".csv")
-
-
-#-- Get the mean and variance of the auc
-eta_val = 0.0001
-#res[,.(sharpe=mean(auc),eta_val=std(auc)),by="learner.id"]
-res_sharpe<-merge(res[,.(stdev=sqrt(var(auc))),by="learner.id"],res[,.(mean_v=mean(auc)),by="learner.id"])
-res_sharpe[,sharpe:=mean_v/stdev][order(-sharpe)]
-res_sharpe<-res_sharpe[order(-sharpe)]
-fwrite(res_sharpe,data_output_dir+curr_model+"/res_sharpe_"+Sys.Date()+".csv")
-
-
-
-predictions_str <- as.data.table(getBMRPredictions(bmr,as.df = T))
-data_baselearners<-merge(dcast(data=predictions_str, id  ~  learner.id, value.var = "prob.1"),unique(predictions_str[,.(id,truth)],by=c("id","truth")))
-rm(predictions_str)
-
-data_baselearners<- data_baselearners[order(id)]
-data_baselearners[,id:=NULL]
-
-
-
-dt_train_cor <- data_baselearners[,truth:=NULL]
-cr<-as.data.table(cor(dt_train_cor))
-cr$learner.id <- names(cr)
-fwrite(cr,data_output_dir+curr_model+"/correlation_matrix_"+Sys.Date()+".csv")
-fwrite(config_file,data_output_dir+curr_model+"/config_file_"+Sys.Date()+".csv")
-
-cat("\n######################################\n")
-
-
-#res_sharpe[,.(learner.id,sharpe)]
-
-#-- Get performance matrix for easy matrix multiplication with the correlation matrix
-##perf_mat <- res_sharpe$sharpe %*% t(res_sharpe$sharpe)
-#perf_mat <-as.data.table(perf_mat)
-#names(perf_mat)<-as.character(res_sharpe$learner.id)
-
-
+  #  curr_model = "SELL_RES_USDJPY"
+  setnames(dt_curr,curr_model,"TARGET")
+  
+  feats_and_target <- c(feat_cols,"TARGET")
+  dt_train <- dt_curr[,..feats_and_target]
+  
+  rm(dt_curr)
+  #-- Get only non NA rows
+  dt_train <- na.omit(dt_train)
+  
+  tsk <- makeClassifTask(id=curr_model,data=as.data.frame(dt_train), target="TARGET")
+  
+  #-- TO check what are the available measures
+  #listMeasures(tsk)
+  
+  #-- Make the resampling strategy
+  rsmpl_desc = makeResampleDesc(method=wind,initial.window=initial.window,horizon=horizon, skip =horizon)
+  
+  #-- Benchmark
+  bmr<-benchmark(lrnrs,tsk,rsmpl_desc,measures = auc)
+  
+  print(bmr)
+  
+  
+  
+  #-- Get the iteration results and store them
+  res <- as.data.table(bmr)
+  fwrite(res,data_output_dir+curr_model+"/performance_iterations_"+Sys.Date()+".csv")
+  
+  
+  #-- Get the mean and variance of the auc
+  eta_val = 0.0001
+  #res[,.(sharpe=mean(auc),eta_val=std(auc)),by="learner.id"]
+  res_sharpe<-merge(res[,.(stdev=sqrt(var(auc))),by="learner.id"],res[,.(mean_v=mean(auc)),by="learner.id"])
+  res_sharpe[,sharpe:=mean_v/stdev][order(-sharpe)]
+  res_sharpe<-res_sharpe[order(-sharpe)]
+  fwrite(res_sharpe,data_output_dir+curr_model+"/res_sharpe_"+Sys.Date()+".csv")
+  
+  
+  
+  predictions_str <- as.data.table(getBMRPredictions(bmr,as.df = T))
+  data_baselearners<-merge(dcast(data=predictions_str, id  ~  learner.id, value.var = "prob.1"),unique(predictions_str[,.(id,truth)],by=c("id","truth")))
+  rm(predictions_str)
+  
+  data_baselearners<- data_baselearners[order(id)]
+  data_baselearners[,id:=NULL]
+  
+  
+  
+  dt_train_cor <- data_baselearners[,truth:=NULL]
+  cr<-as.data.table(cor(dt_train_cor))
+  cr$learner.id <- names(cr)
+  fwrite(cr,data_output_dir+curr_model+"/correlation_matrix_"+Sys.Date()+".csv")
+  fwrite(config_file,data_output_dir+curr_model+"/config_file_"+Sys.Date()+".csv")
+  
+  cat("\n######################################\n")
+  
+  
+  #res_sharpe[,.(learner.id,sharpe)]
+  
+  #-- Get performance matrix for easy matrix multiplication with the correlation matrix
+  ##perf_mat <- res_sharpe$sharpe %*% t(res_sharpe$sharpe)
+  #perf_mat <-as.data.table(perf_mat)
+  #names(perf_mat)<-as.character(res_sharpe$learner.id)
+  
+  
 }
 
 
-parallelStop()
+#parallelStop()
 
 
 
 if("STACK"!="STACK")
-  {
-bst_learners_stack <- unique(c("truth",as.vector(res_sharpe[order(-sharpe)][,learner.id])[seq(1,2)],as.vector(res_sharpe[order(-mean_v)][,learner.id])[seq(1,2)]))
-dt_train <- data_baselearners[,..bst_learners_stack]
-#-- Classifier task
-tsk_stack <- makeClassifTask(id=curr_model+"_stack",data=as.data.frame(dt_train), target="truth")
-
-classif_learners<-c("classif.glmnet")
-#classif_learners<-unique(c("classif.glmnet",as.vector(res_sharpe[order(-sharpe)][,learner.id])[seq(1,5)],as.vector(res_sharpe[order(-mean_v)][,learner.id])[seq(1,5)]))
-
-lrnrs_stack = lapply(classif_learners,makeLearner,predict.type="prob")
-rsmpl_desc_stack = makeResampleDesc(method=wind,initial.window=initial.window_stack,horizon=horizon_stack, skip =horizon)
-bmr_stack<-benchmark(lrnrs_stack,tsk_stack,rsmpl_desc,measures = auc)
-
-
+{
+  bst_learners_stack <- unique(c("truth",as.vector(res_sharpe[order(-sharpe)][,learner.id])[seq(1,2)],as.vector(res_sharpe[order(-mean_v)][,learner.id])[seq(1,2)]))
+  dt_train <- data_baselearners[,..bst_learners_stack]
+  #-- Classifier task
+  tsk_stack <- makeClassifTask(id=curr_model+"_stack",data=as.data.frame(dt_train), target="truth")
+  
+  classif_learners<-c("classif.glmnet")
+  #classif_learners<-unique(c("classif.glmnet",as.vector(res_sharpe[order(-sharpe)][,learner.id])[seq(1,5)],as.vector(res_sharpe[order(-mean_v)][,learner.id])[seq(1,5)]))
+  
+  lrnrs_stack = lapply(classif_learners,makeLearner,predict.type="prob")
+  rsmpl_desc_stack = makeResampleDesc(method=wind,initial.window=initial.window_stack,horizon=horizon_stack, skip =horizon)
+  bmr_stack<-benchmark(lrnrs_stack,tsk_stack,rsmpl_desc,measures = auc)
+  
+  
 }
+
 
 
 

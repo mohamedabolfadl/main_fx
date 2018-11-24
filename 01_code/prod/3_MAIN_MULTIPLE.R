@@ -1,5 +1,13 @@
-#-- Train a single model on all the features (No feature selection)
+#-- This script trains all the available models in mlr (48) and stores their aucs in a table for the pairs defined
 
+
+#-- Usage:
+# In the config_file, change the instruments to the ones you want to train. Choose BUY and SELL of the same model so that the indicators selected are relevant
+# In the config_file, choose the indicator types and the pairfilter to limit, and the indicator_pair_filter. Those define the kind of features that should be 
+# included in the model training process
+
+#Output:
+#  The script generates the average auc per model and the cross correlation of the predictions of the models per pair
 
 
 
@@ -23,14 +31,6 @@ data_output_dir<-"02_data/output/"
 data_input_dir<-"02_data/input/"
 data_intermediate_dir<-"02_data/intermediate/"
 
-#parallelStartSocket(2)
-
-#-- Linux
-#parallelStartMultiCore()
-
-#------------------------------------------------------------#
-##############################################################
-#------------------------------------------------------------#
 
 
 #------------------------------------------------------------#
@@ -92,26 +92,6 @@ CORRELATION_THRESHOLD <- config_file$CORRELATION_THRESHOLD[1]
 #------------------------------------------------------------#
 ############### DEFINE THE FUNCTIONS #########################
 #------------------------------------------------------------#
-# sharpe_ratio = function(task, model, pred, feats, extra.args) {
-#   
-#   predTable <- as.data.table(pred)
-#   predTable <- predTable[response==T]
-#   predTable[,equity:=2*(as.numeric(truth)-1.5)][equity>0,equity:=PF][,equity:=cumsum(equity)][,drawdown:=cummax(equity)][,drawdown:=(drawdown-equity) ]
-#   if(nrow(predTable)>5)
-#   {  
-#     predTable[,equity:=2*(as.numeric(truth)-1.5)][equity>0,equity:=PF][,equity:=cumsum(equity)][,drawdown:=cummax(equity)][,drawdown:=(drawdown-equity) ]
-#     (predTable[nrow(predTable), equity])/((1+max(predTable$drawdown)))
-#   }else{
-#     
-#     (0)
-#   }
-# }
-# sharpe_ratio = makeMeasure(
-#   id = "prob_pos_week", name = "prob_pos_week",
-#   properties = c("classif", "classif.multi", "req.pred",
-#                  "req.truth"),
-#   minimize = FALSE,  fun = sharpe_ratio
-# )
 
 get_sharpe=function(dt_curr,dt_time_lut_prediction_period,PF)
 {
