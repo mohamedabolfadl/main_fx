@@ -1,6 +1,8 @@
 
 #-- This script is to combine the indicators and the trade results into files ready for ML
 
+# TODO: MAKE SURE WEEKENDS ARE REMOVED FROM EVERYONE
+
 
 rm(list=ls())
 set.seed(123)

@@ -1,13 +1,9 @@
 
 #-- Optimizes the parameters of each model for each pair
 
-
-
-
-
-
-rm(list=ls())
-
+# TODO:
+# 1. REMOVE WEEKEND DATA
+# 2. REMOVE CONSECUTIVE TRADES
 
 
 rm(list=ls())

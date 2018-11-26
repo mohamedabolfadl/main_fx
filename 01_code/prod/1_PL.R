@@ -126,8 +126,8 @@ for(SL_VAL in SL_vec)
       set(dt_results,i,2L,dt_min[(inds[i]+1):inds[i+MAX_PERIOD],.( get(paste0("High_",curr)) )][ V1 > (dt_min[inds[i], get(paste0("Close_",curr)) ]+SPREAD+PF*SL),which=T][1])
       set(dt_results,i,3L,dt_min[(inds[i]+1):inds[i+MAX_PERIOD],.( get(paste0("Low_",curr)))][V1<(dt_min[inds[i],get(paste0("Close_",curr))]+SPREAD-SL),which=T][1])
       #--- SELL ---
-      set(dt_results,i,4L,dt_min[(inds[i]+1):inds[i+MAX_PERIOD],.(get(paste0("Low_",curr)))][V1<(dt_min[inds[i],get(paste0("Close_",curr))]+SPREAD-PF*SL),which=T][1])
-      set(dt_results,i,5L,dt_min[(inds[i]+1):inds[i+MAX_PERIOD],.(get(paste0("High_",curr)))][V1>(dt_min[inds[i],get(paste0("Close_",curr))]+SPREAD+SL),which=T][1])
+      set(dt_results,i,4L,dt_min[(inds[i]+1):inds[i+MAX_PERIOD],.(get(paste0("Low_",curr)))][V1<(dt_min[inds[i],get(paste0("Close_",curr))]-SPREAD-PF*SL),which=T][1])
+      set(dt_results,i,5L,dt_min[(inds[i]+1):inds[i+MAX_PERIOD],.(get(paste0("High_",curr)))][V1>(dt_min[inds[i],get(paste0("Close_",curr))]-SPREAD+SL),which=T][1])
       if(i %% 1000 ==0)
       {  
         cat("\r",paste0(round(100*i/length(inds),1)," %"))
