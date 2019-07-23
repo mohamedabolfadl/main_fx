@@ -1,13 +1,15 @@
 
+[Tune-x] 62: nrounds=144; eta=0.0773; colsample_bytree=0.607; max_depth=5; subsample=0.738
+[Tune-y] 62: prob_pos_week.test.mean=0.5167994; time: 0.6 min
+
+
+
+# This script is to check the feature importance of a model that has been trained
+
+
+
 #-- Optimizes the parameters of each model for each pair
 
-# Conclusions:
-# XGBOOST:
-# Low eta, low nrounds small max depth, high subsample, low colsample_bytree
-
-
-# TODO:
-# 2. Remove night trades
 
 rm(list=ls())
 
@@ -24,7 +26,7 @@ library(crayon)
 library(plotly)
 library(caret)
 library(mlrHyperopt)
-library(PerformanceAnalytics)
+library(lubridate)
 library(parallelMap)
 #--- Directories
 data_output_dir<-"02_data/output/"
@@ -54,19 +56,19 @@ config_file <- data.table(
   SL = 15, # Stop loss
   PF = 1,  # Profit factor
   SPREAD = 3, # Spread, make sure there is a file with the specified spread
-  indicator_filter = c("EMA","TMS","atr","dist","corr","DIFF"),
+  #indicator_filter = c("GEN","EMA","TMS","SMA","atr","dist","RSI","williams"),
+  indicator_filter = c("GEN","EMA","TMS","atr","dist","corr","DIFF","diff"),
   # indicator_filter = c("EMA"),
-  indicator_pair_filter = c("AND"),
-  pair_filter = c("AUD"),
-  N_MAX_CONSECUTIVE_TRADES = c(2),
-#  pair_filter = c("AUD","NZD","JPY"),
+  indicator_pair_filter = c("OR"),
+  pair_filter = c("AUD","XAUD","NZD","JPY","EUR","CAD","CHF","CAD"),
+  #  pair_filter = c("AUD","NZD","JPY"),
   SCALE_AND_MEAN_FLAG = F,
   #preprocess_steps = c("center","scale"),
   preprocess_steps = c(""),
   test_portion = 0.3, # Out of sample test part for final evaluation
   window_type =  "FixedWindowCV", #"GrowingWindowCV", "FixedWindowCV"
-  initial.window = 1e3,    # Window size for training
-  horizon = 24, # Future window for testing
+  initial.window = 1e4,    # Window size for training
+  horizon = 1e4, # Future window for testing
   initial.window_stack = 1e4,    # Window size for training
   horizon_stack = 1e4, # Future window for testing
   REMOVE_FAST_WINS = T, # Flag to remove the positive trades which are finished in less than MIN_TRADE_TIME
@@ -78,7 +80,8 @@ config_file <- data.table(
   WRITE_FLAG = F
 )
 
-
+if(T)
+{
 all_pairs <- c("EURUSD","GBPUSD","AUDUSD","USDJPY","USDCHF","NZDUSD","XAUUSD","USDCAD")
 instruments <- data.table(currs = unique(config_file$instruments))
 
@@ -105,7 +108,6 @@ horizon_stack <- config_file$horizon_stack[1]
 wind <- config_file$window_type[1]
 REMOVE_FAST_WINS<-config_file$REMOVE_FAST_WINS[1]
 CORRELATION_THRESHOLD <- config_file$CORRELATION_THRESHOLD[1]
-N_MAX_CONSECUTIVE_TRADES<<-config_file$N_MAX_CONSECUTIVE_TRADES[1]
 
 
 
@@ -113,12 +115,12 @@ N_MAX_CONSECUTIVE_TRADES<<-config_file$N_MAX_CONSECUTIVE_TRADES[1]
 ############### DEFINE THE FUNCTIONS #########################
 #------------------------------------------------------------#
 prob_pos_ret = function(task, model, pred, feats, extra.args) {
-
+  
   pred <- as.data.table(pred)
-setnames(pred,c("truth","id"),c("TARGET","index"))
+  setnames(pred,c("truth","id"),c("TARGET","index"))
   #  print(head(pred))
   
-    step <-0.01
+  step <-0.01
   th<-step
   bst_sharpe <- -999
   bst_thr <- 0.01
@@ -127,21 +129,20 @@ setnames(pred,c("truth","id"),c("TARGET","index"))
     dt_curr<-copy(pred)
     dt_curr[,decision:=as.numeric(prob.1>th)]
     
-    
-    
+    N_MAX_CONSECUTIVE_TRADES<-2
     rolls <- roll_sum(as.matrix(dt_curr[,decision]),width=N_MAX_CONSECUTIVE_TRADES)
     rolls<-as.data.table(rolls)
     names(rolls)<-"triggered_trades"
-    
+
     
     dt_curr<-cbind(dt_curr,rolls)
     dt_curr[triggered_trades>1 & !is.na(triggered_trades),decision:=0]
     
     dt_curr <- dt_curr[decision>0.5]
     
-#-- LIMIT THE CONSECUTIVE TRADES HERE
+    #-- LIMIT THE CONSECUTIVE TRADES HERE
     
-
+    
     ret_varg<-get_sharpe(dt_curr,dt_time_lut,PF)
     if((ret_varg[[2]]==0 & ret_varg[[3]]==0))
     {
@@ -159,20 +160,20 @@ setnames(pred,c("truth","id"),c("TARGET","index"))
     th<-th+step
   }
   
-  
+  #print(bst_mean_ret)
   return(bst_sharpe)
   
-  predTable <- as.data.table(pred)
-  predTable <- predTable[response==T]
-  predTable[,equity:=2*(as.numeric(truth)-1.5)][equity>0,equity:=PF][,equity:=cumsum(equity)][,drawdown:=cummax(equity)][,drawdown:=(drawdown-equity) ]
-  if(nrow(predTable)>5)
-  {
-    predTable[,equity:=2*(as.numeric(truth)-1.5)][equity>0,equity:=PF][,equity:=cumsum(equity)][,drawdown:=cummax(equity)][,drawdown:=(drawdown-equity) ]
-    (predTable[nrow(predTable), equity])/((1+max(predTable$drawdown)))
-  }else{
-
-    (0)
-  }
+ # predTable <- as.data.table(pred)
+#  predTable <- predTable[response==T]
+#  predTable[,equity:=2*(as.numeric(truth)-1.5)][equity>0,equity:=PF][,equity:=cumsum(equity)][,drawdown:=cummax(equity)][,drawdown:=(drawdown-equity) ]
+#  if(nrow(predTable)>5)
+#  {
+#    predTable[,equity:=2*(as.numeric(truth)-1.5)][equity>0,equity:=PF][,equity:=cumsum(equity)][,drawdown:=cummax(equity)][,drawdown:=(drawdown-equity) ]
+#    (predTable[nrow(predTable), equity])/((1+max(predTable$drawdown)))
+#  }else{
+    
+#    (0)
+#  }
 }
 prob_pos_ret = makeMeasure(
   id = "prob_pos_week", name = "prob_pos_week",
@@ -257,17 +258,17 @@ getParamSearchSpace <- function(model)
   if(model=="classif.nnTrain")
   {
     
-  ps = makeParamSet(
-    makeIntegerVectorParam("hidden",len = 2,lower = 10,upper = 1000),
-    makeDiscreteParam("activationfun", values=c("sigm","tanh")),
-    makeNumericParam("learningrate",lower=0,upper=5),
-    makeNumericParam("hidden_dropout",lower=0,upper=1),
-    makeIntegerParam("numepochs", lower = 20L, upper = 100L),
-    makeNumericParam("visible_dropout",lower=0,upper=1)
-  )
-  #[Tune] Result: hidden=55,56; activationfun=sigm; learningrate=1.91; hidden_dropout=0.404; numepochs=5; visible_dropout=0.775 : auc.test.mean=0.5410692
-  return(ps)
-  
+    ps = makeParamSet(
+      makeIntegerVectorParam("hidden",len = 2,lower = 10,upper = 100),
+      makeDiscreteParam("activationfun", values=c("sigm","tanh")),
+      makeNumericParam("learningrate",lower=0,upper=2),
+      makeNumericParam("hidden_dropout",lower=0,upper=1),
+      makeIntegerParam("numepochs", lower = 2L, upper = 10L),
+      makeNumericParam("visible_dropout",lower=0,upper=1)
+    )
+    #[Tune] Result: hidden=55,56; activationfun=sigm; learningrate=1.91; hidden_dropout=0.404; numepochs=5; visible_dropout=0.775 : auc.test.mean=0.5410692
+    return(ps)
+    
   }
   
   
@@ -276,33 +277,34 @@ getParamSearchSpace <- function(model)
   if(model=="classif.h2o.deeplearning")
   {
     ps = makeParamSet(
-    makeIntegerVectorParam("hidden",len = 2,lower = 10,upper = 100),
-    #  makeDiscreteParam("activation", values=c("Rectifier")),
-    # makeNumericParam("l1",lower=0.001,upper=1),
-    #  makeNumericParam("l2",lower=0.001,upper=1),
-    # makeNumericParam("input_dropout_ratio",lower=0,upper=1),
-    #  makeNumericParam("rho",lower=0,upper=10),
-    makeNumericParam("epochs", lower = 8, upper = 20),
-    makeNumericParam("rate",lower=0,upper=1)#,
-    # makeLogicalParam("quiet_mode")
-  )
-  return(ps)
+      makeIntegerVectorParam("hidden",len = 2,lower = 10,upper = 100),
+      #  makeDiscreteParam("activation", values=c("Rectifier")),
+      # makeNumericParam("l1",lower=0.001,upper=1),
+      #  makeNumericParam("l2",lower=0.001,upper=1),
+      # makeNumericParam("input_dropout_ratio",lower=0,upper=1),
+      #  makeNumericParam("rho",lower=0,upper=10),
+      makeNumericParam("epochs", lower = 8, upper = 20),
+      makeNumericParam("rate",lower=0,upper=1)#,
+      # makeLogicalParam("quiet_mode")
+    )
+    return(ps)
+    
+  }
   
-}
-
+  #[Tune-x] 62: nrounds=144; eta=0.0773; colsample_bytree=0.607; max_depth=5; subsample=0.738
   
   if(model=="classif.xgboost")
   {
     ps = makeParamSet(
-      makeIntegerParam("nrounds", lower = 2L, upper = 10),
+      makeIntegerParam("nrounds", lower = 130L, upper = 150L),
       #  makeDiscreteParam("activation", values=c("Rectifier")),
-       makeNumericParam("eta",lower=0.001,upper=0.01),
+      makeNumericParam("eta",lower=0.05,upper=0.09),
       #  makeNumericParam("l2",lower=0.001,upper=1),
       # makeNumericParam("input_dropout_ratio",lower=0,upper=1),
       #  makeNumericParam("rho",lower=0,upper=10),
-      makeNumericParam("colsample_bytree", lower = 0.31, upper = 0.5),
-      makeIntegerParam("max_depth", lower = 2L, upper = 4L),
-      makeNumericParam("subsample",lower=0.81,upper=0.99)#,
+      makeNumericParam("colsample_bytree", lower = 0.55, upper = 0.65),
+      makeIntegerParam("max_depth", lower = 4L, upper = 6L),
+      makeNumericParam("subsample",lower=0.7,upper=0.8)#,
       # makeLogicalParam("quiet_mode")
     )
     return(ps)
@@ -747,7 +749,7 @@ for(pair in pairs)
 {
   curr_model<-fread(data_output_dir+pair+"/top_models.csv")
   curr_model$pair <- pair
-#  print(curr_model)
+  #  print(curr_model)
   if(i==1)
   {
     all_mdls <- curr_model 
@@ -760,7 +762,7 @@ for(pair in pairs)
 
 fwrite(all_mdls,data_output_dir+"models_per_pair.csv")
 
-
+}
 #--------------------------------------------------------#
 ###############  READ BEST MODELS FOR THIS PAIR ##########
 #--------------------------------------------------------#
@@ -777,17 +779,15 @@ classif_learners<-unique(dt_models$models)
 
 
 dt_sel <- merge(dt_sel,dt_time_lut[,.(index,Time)],all.x=T,by="index")
-dt_sel[,hour:=as.numeric(lubridate::hour(Time))]
+dt_sel[,hour:=as.factor(lubridate::hour(Time))]
 dt_sel[,Time:=NULL]
+
 
 dt_curr<-  copy(dt_sel)
 
-
-
-
 if(!JUST_CHECKING)
-  {
-lrnrs = lapply(classif_learners,makeLearner,predict.type="prob")
+{
+  lrnrs = lapply(classif_learners,makeLearner,predict.type="prob")
 }
 
 #  curr_model = "SELL_RES_USDJPY"
@@ -796,120 +796,94 @@ feat_cols<-c(feat_cols,"hour")
 feats_and_target <- c(feat_cols,"TARGET")
 dt_train <- dt_curr[,..feats_and_target]
 
-feats_and_target <- c(feat_cols,"TARGET")
-dt_train <- dt_curr[,..feats_and_target]
-
-
-
-rm(dt_curr)
-
-
+#rm(dt_curr)
 #-- Get only non NA rows
 dt_train <- na.omit(dt_train)
+
 dt_train = createDummyFeatures(as.data.frame(dt_train),target="TARGET")
 tsk <- makeClassifTask(id=curr_model,data=as.data.frame(dt_train), target="TARGET")
 #-- Make the resampling strategy
 rsmpl_desc = makeResampleDesc(method=wind,initial.window=initial.window,horizon=horizon, skip =horizon)
 
 
+lrnr <- makeLearner("classif.xgboost",predict.type="prob")
+
+fs_ctrl <- makeFeatSelControlRandom(max.features=500,maxit = 1e3,prob = 0.8)
+res <- selectFeatures(learner=lrnr,task=tsk,
+                 resampling=rsmpl_desc,measures=prob_pos_ret,control=fs_ctrl,show.info = T)
+
+
+###############################################
+####   FEATURE IMPORTANCE #####################
+###############################################
 
 
 
-#-- Hyperparameter optimization
-# based on https://www.kaggle.com/getting-started/42758
+fv2 = generateFilterValuesData(tsk, method =
+                                # c("information.gain", "chi.squared"))
+                    #            c( "chi.squared"))
+c( "information.gain"))
+
+plotFilterValues(fv2)
 
 
-#learner_name<- "classif.nnTrain"
+
+
+
+
+
+###############################################
+#######   SELECT FEATURES #####################
+###############################################
+
+
+#[Tune-x] 62: nrounds=144; eta=0.0773; colsample_bytree=0.607; max_depth=5; subsample=0.738
+
+lrn = makeFilterWrapper(learner = "classif.xgboost", fw.method =
+                          "information.gain",nrounds=144, eta=0.0773, colsample_bytree=0.607, max_depth=5, subsample=0.738)
+ps = makeParamSet(makeDiscreteParam("fw.perc", values = seq(0.1,
+                                                            0.9, 0.1)))
+
+res = tuneParamsMultiCrit(lrn, task = tsk, resampling = rsmpl_desc,
+                 par.set = ps,
+                 measures = list(fpr,fnr), control =
+                   makeTuneMultiCritControlGrid())
+
+plotTuneMultiCritResult(res)
+
+
+
+makeTuneMultiCritControlGrid()
+
+### Keep the 2 most important features
+#filtered.task = filterFeatures(tsk, method =
+#                                 "information.gain", abs = 2)
+### Keep all features with importance greater than 0.5
+#filtered.task = filterFeatures(tsk, fval = fv2, threshold =
+#                                 0.5)
+#filtered.task = filterFeatures(tsk, fval = fv2, perc = 0.85)
+
+
+
+
+#-- Tune all the parameters
+
+filtered.task = filterFeatures(tsk, method ="information.gain", abs = 4)
 learner_name<- "classif.xgboost"
-
+learner_name<- "classif.pamr"
+learner_name<- "classif.plsdaCaret"
 lrnr <- makeLearner(learner_name,predict.type="prob")
 ps = getParamSearchSpace(learner_name)
 #-- Set the maximum number of iterations
 ctrl = makeTuneControlRandom(maxit = 10L)
-
 #-- Tune the hyperparameters
-res = tuneParams(lrnr, task = tsk, resampling =
+res = tuneParams(lrnr, task = filtered.task, resampling =
                    rsmpl_desc,
-                 par.set = ps, control = ctrl,measures = prob_pos_ret)
-
-fwrite(as.data.table(as.matrix(t(c(unlist(res$x),res$y)))),data_output_dir+"xgboost_best.csv")
-res_prsed <- as.data.table(res$opt.path$env$path)
-plotOptPath(op=res$opt.path)
-
-fwrite(res_prsed,data_output_dir+"xgboost_all_tune_results.csv")
-
-setnames(res_prsed,"prob_pos_week.test.mean","prob_pos_week")
-
-# "nrounds"          "eta"              "colsample_bytree" "max_depth"        "subsample"       
-# "prob_pos_week"   
-
-ggplot(res_prsed,aes(x=nrounds,y=prob_pos_week))+geom_point()+geom_smooth()   # There is an optima ar aaround 270
-ggplot(res_prsed,aes(x=eta,y=prob_pos_week))+geom_point()+geom_smooth()       # There is an optima at around 0.03
-ggplot(res_prsed,aes(x=subsample,y=prob_pos_week))+geom_point()+geom_smooth() # No clear correlation
-ggplot(res_prsed,aes(x=max_depth,y=prob_pos_week))+geom_point()+geom_smooth() # 4 seems to be the best
-
-
-# Inaccurate
-#data = generateHyperParsEffectData(res,partial.dep = T)
-#plt = plotHyperParsEffect(data, x = "nrounds", y = "eta", z =
-#                            "prob_pos_week.test.mean",
-#                          plot.type = "heatmap",  partial.dep.learn=makeLearner("regr.glm"))
-#plt
+                 par.set = ps, control = ctrl,measures = auc)
 
 
 
-learner_name<- "classif.nnTrain"
-lrnr <- makeLearner(learner_name,predict.type="prob")
-ps = getParamSearchSpace(learner_name)
-#-- Set the maximum number of iterations
-ctrl = makeTuneControlRandom(maxit = 50L)
-#-- Tune the hyperparameters
-res_nn = tuneParams(lrnr, task = tsk, resampling =
-                   rsmpl_desc,
-                 par.set = ps, control = ctrl,measures = prob_pos_ret)
+fwrite(as.data.table(as.matrix(t(c(unlist(res$x),res$y)))),data_output_dir+"tst.csv")
+res$x$ncomp
 
-
-fwrite(as.data.table(as.matrix(t(c(unlist(res_nn$x),res$y)))),data_output_dir+"nnTrain_best.csv")
-
-res_prsed_nn <- as.data.table(res_nn$opt.path$env$path)
-fwrite(res_prsed_nn,data_output_dir+"nnTrain_all_tune_results.csv")
-
-
-
-
-if(F)
-{
-#-- Set the best parameters to the learner
-lrnr_best = setHyperPars(lrnr,par.vals=res$x)
-
-#-- Redo the predictions to get the probabilies
-res_pred <- resample(learner = lrnr_best, tsk,resampling = rsmpl_desc , measures = auc)
-
-#-- Parse the results
-preds <- as.data.table(res_pred$pred$data)
-preds <- preds[,.(id,prob.1,truth)]
-setnames(preds,c("id","prob.1","truth"),c("index","prediction","TARGET"))
-
-
-
-ret_var<-get_mean_returns_and_variance(preds,dt_time_lut,PF)
-
-cat(red("Probability of positive weekly returns = "+ round(100*(1-pnorm(0,ret_var[[1]]/ret_var[[2]])),2)+" mean returns = "+ret_var[[1]]+" std(returns) = "+ret_var[[2]]+"\n"))
-
-
-
-getParamSet(lrnr) # check the setting
-
-hyper.control <- makeHyperControl(
-  mlr.control = makeTuneControlRandom(maxit = 20L), #search strategy
-  resampling = rsmpl_desc, #resampling strategy
-  measures = auc) # measure to use (if you want to use more, than provide the measures with a list
-
-res <- hyperopt(tsk, learner = lrnr,
-                hyper.control = hyper.control)
-res$x
-newlearnernnet <- setHyperPars(classif.lrn, par.vals = res$x)
-
-
-}
-
+list(res$x)

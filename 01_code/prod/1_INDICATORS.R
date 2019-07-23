@@ -2,12 +2,11 @@
 
 
 # TODO: 
-# 1. Correlations
-# 2. Differences
-# 3. Stochastics
-
-
-
+# Include distance to resistance whole numbers eg 1.100 etc and support and resistance using close-roll_max(width=N)
+# 1. Include the hour here not in the training script
+# 4. including linear regression roll_lm()
+# 5. Include feature engineering on the correlations ie short/long
+# How far is target from SR (10,15,20)
 
 rm(list=ls())
 set.seed(123)
@@ -38,7 +37,7 @@ models_archive_dir <- "03_models/archive/"
 
 
 #--- INPUT PARAMETERS
-N_short_term_corr<-24   # past day
+N_short_term_corr<-6   # past day
 N_long_term_corr<- 3240 # Past 6 months
 
 MA_PER_1 <- 50
@@ -47,8 +46,8 @@ MA_PER_3 <- 200
 MA_PER_4 <- 1000
 MA_PER_5 <- 2000
 
-EMA_OF_HIGH <- F # Should we calculate EMA of the high
-EMA_OF_LOW <- F  # Should we calcualte EMA of the LOW
+EMA_OF_HIGH <- T # Should we calculate EMA of the high
+EMA_OF_LOW <- T  # Should we calcualte EMA of the LOW
 
 
 #-- Read the minute data, skip the first few entries
@@ -231,21 +230,21 @@ diff_cols_to_correlate <- c(paste0(curs,"_DIFF_1_1"))
 
 result_close_cor_short <- roll_cor(as.matrix(dt_results_all[,..close_cols_to_correlate]), width = N_short_term_corr)
 dt_close_short_cor<-as.data.table(do.call(rbind, lapply(split.along.dim(result_close_cor_short,3),parseCormat,signal="_Close")))
-names(dt_close_short_cor)<-getCorNames(result_close_cor_short[,,1],"_Close","_short")
+names(dt_close_short_cor)<-getCorNames(result_close_cor_short[,,1],"_Close","_close_short")
 
 result_close_cor_long <- roll_cor(as.matrix(dt_results_all[,..close_cols_to_correlate]), width = N_long_term_corr)
 dt_close_long_cor<-as.data.table(do.call(rbind, lapply(split.along.dim(result_close_cor_long,3),parseCormat,signal="_Close")))
-names(dt_close_long_cor)<-getCorNames(result_close_cor_long[,,1],"_Close","_long")
+names(dt_close_long_cor)<-getCorNames(result_close_cor_long[,,1],"_Close","_close_long")
 
 
 result_diff_cor_short <- roll_cor(as.matrix(dt_results_all[,..diff_cols_to_correlate]), width = N_short_term_corr)
 dt_diff_long_cor<-as.data.table(do.call(rbind, lapply(split.along.dim(result_diff_cor_short,3),parseCormat,signal="_DIFF_1_1")))
-names(dt_diff_long_cor)<-getCorNames(result_diff_cor_short[,,1],"_DIFF_1_1","_short")
+names(dt_diff_long_cor)<-getCorNames(result_diff_cor_short[,,1],"_DIFF_1_1","_diff_short")
 
 
 result_diff_cor_long <- roll_cor(as.matrix(dt_results_all[,..diff_cols_to_correlate]), width = N_long_term_corr)
 dt_diff_short_cor<-as.data.table(do.call(rbind, lapply(split.along.dim(result_diff_cor_long,3),parseCormat,signal="_DIFF_1_1")))
-names(dt_diff_short_cor)<-getCorNames(result_diff_cor_long[,,1],"_DIFF_1_1","_long")
+names(dt_diff_short_cor)<-getCorNames(result_diff_cor_long[,,1],"_DIFF_1_1","_diff_long")
 
 
 
@@ -286,6 +285,8 @@ ema_cols <- names(dt_results_all)[grepl("EMA_50",names(dt_results_all))]
 avg_ema_50 <- as.matrix(dt_results_all[,..ema_cols])%*%weights
 # "USDJPY_RSI" "GBPUSD_RSI" "USDCHF_RSI" "USDCAD_RSI" "NZDUSD_RSI" "AUDUSD_RSI" "XAUUSD_RSI" "EURUSD_RSI"
 dt_results_all[,GEN_AVG_ema_50:=avg_ema_50]
+
+
 
 
 

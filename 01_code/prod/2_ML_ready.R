@@ -36,6 +36,12 @@ target_to_the_end <- function(data_set,targ_Name)
 
 
 fls_to_read<-list.files(data_intermediate_dir)[grepl("_ALL.csv$",list.files(data_intermediate_dir))&grepl("^SL",list.files(data_intermediate_dir))]
+
+
+
+
+
+
 #fls_to_read<-list.files(data_intermediate_dir)[grepl("^SL",list.files(data_intermediate_dir))]
 
 #fls_to_read <- "SL_20_PF_1_SPREAD_2_ALL.csv"

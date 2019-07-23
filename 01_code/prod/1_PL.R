@@ -33,9 +33,9 @@ start_time<-Sys.time()
 curs <- c("USDJPY","GBPUSD","USDCHF","USDCAD","NZDUSD","AUDUSD","XAUUSD","EURUSD")
 options(scipen=999)
 pipsize<-0.0001
-SL_vec<-c(10,20,25)
+SL_vec<-c(100)
 PF_vec<-c(1)
-SPREAD_VAL <- c(3)
+SPREAD_VAL <- c(0)
 MAX_PERIOD<-50
 N <- 5e6 #-- Number of columns to read
 
@@ -54,6 +54,9 @@ dt_min[,Time:=as.POSIXct(Time, format = "%Y-%m-%d %H:%M:%S")]
 #-- Cutting out the first 1e3 minutes
 dt_min<-dt_min[(1+1e3):nrow(dt_min),]
 
+#-- REMOVE WEEKEND DATA
+# PS: documentation says that 1 is monday, but after checking turned out to be 2
+dt_min<-dt_min[lubridate::wday(Time) %in% c(2,3,4,5,6)]
 
 
 #-- Convert data.table to xts

@@ -1,0 +1,16 @@
+
+
+
+02_data/
+03_figs/
+03_models/
+05_logs/
+07_emails/
+*.tar.gz
+*.Rproj
+*.png
+*.model
+.Rproj.user/
+.spyproject/
+06_docs/
+
