@@ -1,37 +1,22 @@
 # -*- coding: utf-8 -*-
 """
 Created on Sat Mar  2 23:07:48 2019
-
 @author: Mohamed Ibrahim
+
+Purpose:
+    Label buy and sell trades
+    
+Input: 
+    Minute data: dt_all_min.csv in input folder
+
+Output:
+    data_output_dir+pair+'_labels.csv'
+
 """
 
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Mar  1 16:10:26 2019
-
-@author: Mohamed Ibrahim
-"""
-
-
-import numpy as np
-import pandas as pd
-from statsmodels.tsa.stattools import adfuller
-from tsfresh import extract_features
-import os
-
-
-
-def rm_all():
-    for name in dir():
-        if not name.startswith('_'):
-            del globals()[name]
-
-
-
-rm_all()
-
-
-
+####################################
+#--       INPUT VARIABLES       
+####################################
 
 data_input_dir = "02_data/input/"
 data_intermediate_dir = "02_data/intermediate/"
@@ -42,8 +27,8 @@ models_archive_dir = "03_models/archive/"
 path = 'C:/Users/Mohamed Ibrahim/Box Sync/FX_DATASCIENCE/main_fx'
 os.chdir(path)
 
-#-- Run inputs
-curs = ["USDJPY","GBPUSD","USDCHF","USDCAD","NZDUSD","AUDUSD","XAUUSD","GBPUSD"]
+#-- Pairs to compute the labels for
+pairs = ['eurusd','gbpusd','audusd','usdjpy','usdcad','usdchf','xauusd','nzdusd']
 pipsize=0.0001
 decimal_plc = int(np.log(1/pipsize)/np.log(10))
 SL_vec=100
@@ -64,34 +49,60 @@ buy_sl = SL
 sell_sl = SL
 SPREAD = 1.
 
+####################################
+#--       IMPORT LIBRARIES       
+####################################
+
+import numpy as np
+import pandas as pd
+from statsmodels.tsa.stattools import adfuller
+from tsfresh import extract_features
+import os
+
+
+
+def rm_all():
+    for name in dir():
+        if not name.startswith('_'):
+            del globals()[name]
+
+
+
+rm_all()
+
+
+####################################
+#--       MAIN ENTRY       
+####################################
+
+
 print('Reading minute data...')
 df = pd.read_csv(data_input_dir+"dt_all_min.csv")
 
-pairs = ['eurusd','gbpusd','audusd','usdjpy','usdcad','usdchf','xauusd','nzdusd']
-#pairs = ['gbpusd','audusd','usdjpy','usdcad','usdchf','xauusd','nzdusd']
 
+#-- Loop over the pairs
 for pair in pairs:
+
     print(70*'#')
     print(pair)
     
     pair_cap = pair.upper()
-    
+  
     d = df[['Time','High_'+pair_cap,'Low_'+pair_cap,'Close_'+pair_cap]]
     
     #-- Convert time to date
     d['Time']  = pd.to_datetime(d['Time'])
     
     # Set the index to be the time
-    d           = d.set_index('Time')
+    d = d.set_index('Time')
     
     #-- Exclude weekends
     d=d[d.index.dayofweek < 5]
     
-    #-- Init entry
+    #-- Initialize entry entry
     d['entry'] = 0
         
-    #-- Define entry time
-    #d.loc[ (d.index.hour == 9) & (d.index.minute <1) ,'entry'] =1
+    #-- Define entry time as all hour times    
     d.loc[  (d.index.minute <1) ,'entry'] =1
          
     #-- Label the period ID
@@ -140,12 +151,9 @@ for pair in pairs:
     iter_.loc[ np.isnan(iter_['sell_sl']) & np.isnan(iter_['sell_tp']), 'sell'] = False
     iter_.loc[:,['sell_tp','sell_sl','sell']]
     
-    
     #-- Label betsize
     iter_['buy_betsize'] =False
     iter_.loc[ np.isnan(iter_['buy_sl']) & np.isnan(iter_['buy_tp']), 'buy_betsize'] = True
-    
-    
     iter_['sell_betsize'] =False
     iter_.loc[ np.isnan(iter_['sell_sl']) & np.isnan(iter_['sell_tp']), 'sell_betsize'] = True
     

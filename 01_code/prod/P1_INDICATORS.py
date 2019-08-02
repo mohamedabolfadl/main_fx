@@ -29,24 +29,17 @@ models_archive_dir = "03_models/archive/"
 path = 'C:/Users/Mohamed Ibrahim/Box Sync/FX_DATASCIENCE/main_fx'
 os.chdir(path)
 
-#-- Run inputs
-#curs = ["USDJPY","GBPUSD","USDCHF","USDCAD","NZDUSD","AUDUSD","XAUUSD","GBPUSD"]
-#pipsize=0.0001
-#decimal_plc = int(np.log(1/pipsize)/np.log(10))
-#SL_vec=100
-#PF_vec=1
-#SPREAD_VAL = 0
-#MAX_PERIOD=50
-N = 5e6 #-- Number of columns to read
-USE_ALL_COLS = False
-START_HOUR = 9
-brick_size = 5 
-DO_FRAC_DIFF = False
 
+#-- Compute OHLC for all pairs before extracting features
+USE_ALL_COLS = False
+#-- Start trade hour
+START_HOUR = 9
+#-- Brick size in pips of the Renko
+brick_size = 5 
+#-- Flag whether to do slow fractional differentiation
+DO_FRAC_DIFF = False
 #-- Pairs to extract the features
 pairs = ['eurusd','gbpusd']
-
-
 
 
 
@@ -164,7 +157,7 @@ def plotMinFFD(df0):
 #--       MAIN ENTRY       
 ####################################
 
-rm_all()
+#rm_all()
 
 
 #-- Read minute data
