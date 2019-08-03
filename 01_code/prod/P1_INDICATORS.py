@@ -27,7 +27,6 @@ models_archive_dir = "03_models/archive/"
 
 #-- Change to project directory
 path = 'C:/Users/Mohamed Ibrahim/Box Sync/FX_DATASCIENCE/main_fx'
-os.chdir(path)
 
 
 #-- Compute OHLC for all pairs before extracting features
@@ -157,7 +156,11 @@ def plotMinFFD(df0):
 #--       MAIN ENTRY       
 ####################################
 
-#rm_all()
+#-- Change to project home directory
+os.chdir(path)
+
+
+
 
 
 #-- Read minute data

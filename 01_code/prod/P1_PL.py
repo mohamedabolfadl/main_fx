@@ -25,7 +25,6 @@ models_prod_dir = "03_models/prod/"
 models_archive_dir = "03_models/archive/"
 
 path = 'C:/Users/Mohamed Ibrahim/Box Sync/FX_DATASCIENCE/main_fx'
-os.chdir(path)
 
 #-- Pairs to compute the labels for
 pairs = ['eurusd','gbpusd','audusd','usdjpy','usdcad','usdchf','xauusd','nzdusd']
@@ -59,6 +58,9 @@ from statsmodels.tsa.stattools import adfuller
 from tsfresh import extract_features
 import os
 
+#-- Change to project directory
+os.chdir(path)
+
 
 
 def rm_all():
@@ -68,7 +70,7 @@ def rm_all():
 
 
 
-rm_all()
+
 
 
 ####################################

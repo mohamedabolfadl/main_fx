@@ -29,7 +29,6 @@ models_prod_dir = "03_models/prod/"
 models_archive_dir = "03_models/archive/"
 
 path = 'C:/Users/Mohamed Ibrahim/Box Sync/FX_DATASCIENCE/main_fx'
-os.chdir(path)
 
 #-- Run inputs
 SPREAD_VEC = [1,2,3]
@@ -56,6 +55,8 @@ import os
 #--       ENTRY POINT       
 ####################################
 
+#-- Change to project directory
+os.chdir(path)
 
 
 
