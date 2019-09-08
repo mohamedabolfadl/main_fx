@@ -44,7 +44,7 @@ path = 'C:/Users/Mohamed Ibrahim/Box Sync/FX_DATASCIENCE/main_fx'
 #-- Run inputs
 SPREAD = 1 # [1,2,3]
 MAXTRADETIME = 8 # [4,6,8]
-SL = 20 # [10,20,30]
+SL = 30 # [10,20,30]
 STARTHOUR = 9
 pair = 'eurusd'
 target = 'sell'
@@ -146,8 +146,11 @@ targ_cols = ['Unnamed: 0', 'id','index', 'seq', 'buy_tp', 'sell_tp', 'buy_sl', '
 #-- Features
 feats = [x  for x in df.columns if x not in targ_cols]
 
-#-- Create look up of feature names
+#-- Giving shorter names for the features
 new_feat_names = ['feat_'+str(i) for i in np.arange(1,len(feats)+1,1)]
+
+#-- Create look up of feature names
+feat_lut = pd.DataFrame(zip(feats,new_feat_names), columns = ["old_feat_name","new_feat_name"])
 
 #-- Rename column names
 df = df[feats]
@@ -354,14 +357,135 @@ if DO_DATA_EXPLORATION:
 
 
 
+#-------------------------------   JUNK   -------------------------------------
+
+from feature_selector import FeatureSelector
+
+#-- Separate features from labels
+y = df['target']
+train_labels = y
+df_feats = df.drop(columns = ['target'])
+
+#-- Create an instance
+fs = FeatureSelector(data = df_feats, labels = train_labels)
+
+
+#-- Missing value features
+fs.identify_missing(missing_threshold=0.6)
+missing_features = fs.ops['missing']
+
+
+#-- Single unique
+fs.identify_single_unique()
+single_unique = fs.ops['single_unique']
+
+
+#-- Correlated
+fs.identify_collinear(correlation_threshold=0.8)
+correlated_features = fs.ops['collinear']
+
+correlated_features = fs.record_collinear.loc[:,"drop_feature"]
+
+#-- Features to exclude
+exc_feats =[]
+exc_feats.extend(missing_features)
+exc_feats.extend(single_unique)
+exc_feats.extend(correlated_features)
+
+sel_cols = list(set(df.columns)-set(exc_feats))
+#sel_cols.extend(["target"])
+df_cl = df[sel_cols]
+
+#-- Trying to select the top N features with pval for training
+import xgboost
+df_cl.target = df_cl.target.astype(str)
+
+r = getPvalStats(df_cl , "target")
+#-- Skip top 2 feats which are target and time
+skipFeats = 2 
+
+
+
+
+
+#-- XGB params
+params_xgb = {"objective":"binary:logistic",
+                  'colsample_bytree': 0.1,
+                  'learning_rate': 0.01,
+                        'max_depth': 3,
+#                        'nrounds':50,
+                        'n_estimators':10}
+
+
+nFeatSelectVec = range(5,15)
+
+auc = []
+
+for nFeatsSelect in nFeatSelectVec:
+    print(nFeatsSelect)
+    #-- Number of features to select
+    #nFeatsSelect = 20
+    
+    #-- Get top feats
+    selFeats = r.iloc[skipFeats :nFeatsSelect,:]
+    
+    
+    #-- Select columns (features + target)
+    selCols = list(selFeats.column_name)
+    selCols.extend(["target"])
+    df_sel = df[selCols]
+    
+    #-- Convert String to int
+    df_sel.target  = df_sel.target.map(lambda x: int(x=="True"))
+    
+    
+    
+    #-- Split features from target
+    X = df_sel[list(selFeats.column_name)]
+    y = df_sel.target
+    
+    
+    
+    data_dmatrix = xgboost.DMatrix(data=X,label=y.values)
+       
+        
+    cv_results = xgboost.cv(dtrain=data_dmatrix, params=params_xgb, nfold=20,
+                            metrics="auc",
+                            as_pandas=True, seed=123)
+        
+    #num_boost_round=5000,early_stopping_rounds=30,
+    
+    print( ( (cv_results["test-auc-mean"]).tail(1) ))
+
+    auc.append(cv_results["test-auc-mean"].mean())
+
+
+
+#-- Checking the name of the features
+selFeats.drop("index",inplace = True, axis =1)
+selFeats.columns = ["new_feat_name","pval"]
+t = selFeats.merge(feat_lut, how = 'left',on='new_feat_name')
+
+
+
+
+
+df_cl.target = df_cl.target == 1
+#df_cl.target = df_cl.target.map(lambda x: if x: "True" else "False")
+
+X = df_cl[list(set(df_cl.columns)-set("target"))]
+X.drop("feat_2384", inplace=True, axis = 1)
+X.drop("target", inplace=True, axis = 1)
+
+y = df_cl.target.map(lambda x: int(x))
 
 
 
 
 
 
-
-
-
+#correlated_features[:5]
+#fs.plot_collinear()
+#fs.record_collinear.head()
 
 
