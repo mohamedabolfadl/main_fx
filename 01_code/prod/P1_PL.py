@@ -29,16 +29,16 @@ path = 'C:/Users/Mohamed Ibrahim/Box Sync/FX_DATASCIENCE/main_fx'
 #-- Pairs to compute the labels for
 pairs = ['eurusd','gbpusd','audusd','usdjpy','usdcad','usdchf','xauusd','nzdusd']
 pipsize=0.0001
-decimal_plc = int(np.log(1/pipsize)/np.log(10))
-SL_vec=100
-PF_vec=1
-SPREAD_VAL = 0
-MAX_PERIOD=50
+#decimal_plc = int(np.log(1/pipsize)/np.log(10))
+#SL_vec=100
+#PF_vec=1
+#SPREAD_VAL = 0
+#MAX_PERIOD=50
 N = 5e6 #-- Number of columns to read
-USE_ALL_COLS = False
-START_HOUR = 9
-brick_size = 5 
-DO_FRAC_DIFF = False
+#USE_ALL_COLS = False
+#START_HOUR = 9
+#brick_size = 5 
+#DO_FRAC_DIFF = False
 MAX_TRADE_TIME = 4*60  # Maximum time of the observation in minutes
 SL = 30
 TP_fac = 1
@@ -62,15 +62,11 @@ import os
 os.chdir(path)
 
 
+####################################
+#--       DEFINE FUNCTIONS       
+####################################
 
-def rm_all():
-    for name in dir():
-        if not name.startswith('_'):
-            del globals()[name]
-
-
-
-
+exec(open("01_code/prod/P1_functions.py").read())
 
 
 ####################################
