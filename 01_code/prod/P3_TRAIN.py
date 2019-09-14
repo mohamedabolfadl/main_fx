@@ -25,6 +25,9 @@ import pandas as pd
 import os
 import seaborn as sns
 import matplotlib.pyplot as plt
+from feature_selector import FeatureSelector
+from sklearn.preprocessing import StandardScaler
+import xgboost
 
 ####################################
 #--       INPUT VARIABLES       
@@ -36,8 +39,26 @@ data_output_dir = "02_data/output/"
 models_prod_dir = "03_models/prod/"
 models_archive_dir = "03_models/archive/"
 
+
+USE_LEARNER_FOR_FEATURE_SELECTION =False
 DO_DATA_EXPLORATION = False
 TEST_FEATURE_SELECTION =False
+
+
+#-- Combinatorial CV parameters
+#-- N groups of CV
+N_CV = 6
+k_CV = 2
+DECISION_THRESHOLD = 0.6
+NFEAT_PVAL = 80
+
+#-- Feature selection maximum missing values
+MISSING_VALUE_THRESHOLD = 0.05
+#-- Feature selection maximum correlation between variables
+CORRELATION_THRESHOLD = 0.8
+
+#-- Portion to test the model
+TEST_PORTION = 0.1
 
 path = 'C:/Users/Mohamed Ibrahim/Box Sync/FX_DATASCIENCE/main_fx'
 
@@ -54,77 +75,7 @@ target = 'sell'
 #--       FUNCTION DEFINITIONS
 ####################################
 
-def eda(data):
-    print("----------Top-5- Record----------")
-    print(data.head(5))
-    print("-----------Information-----------")
-    print(data.info())
-    print("-----------Data Types-----------")
-    print(data.dtypes)
-    print("----------Missing value-----------")
-    print(data.isnull().sum())
-    print("----------Null value-----------")
-    print(data.isna().sum())
-    print("----------Shape of Data----------")
-    print(data.shape)
-
-#-- Box plot discrete vs contunuous
-def boxplot(df, discVar, contVar, showfliers=False):
-	data = pd.concat([df[contVar], df[discVar]], axis=1).dropna()
-	f, ax = plt.subplots(figsize=(8, 6))
-	sns.boxplot(x=discVar, y=contVar, data=data,showfliers=False)
-	f.show()
-
-#-- Scatterplot
-def scatter(df, contVar1, contVar2):
-	data = pd.concat([df[contVar2], df[contVar1]], axis=1)
-	data.plot.scatter(x=contVar1, y=contVar2)
-
-
-#-- Target should be boolean
-def getPvalStats(df, target):
-	import scipy.stats as stats
-	df_res = pd.DataFrame(df.columns,columns=['column_name'])
-	df_res['pval'] = 0
-	for cl in df.columns:
-	    try:
-	        res = stats.ttest_ind(a=df.loc[df[target]=="True",cl].dropna(),b=df.loc[df[target]=="False",cl].dropna(),equal_var=False)
-	        df_res.loc[df_res.column_name==cl,'pval'] = res[1]
-	    except:
-	        pass
-	feat_rank = df_res.dropna().sort_values(by='pval').reset_index()
-	return feat_rank
-
-
-def correlationHeatMap(df):
-	#correlation matrix
-	corrmat = df.corr()
-	f, ax = plt.subplots(figsize=(12, 9))
-	sns.heatmap(corrmat, vmax=.8, square=True);
-
-
-#-- Plot top k correlated to column x
-def topCorrelatedHeatmap(df, x, k=10):
-	corrmat = df.corr()
-	#saleprice correlation matrix
-	k = min(k,len(df.columns)) #number of variables for heatmap
-	cols = corrmat.nlargest(k, x)[x].index
-	cm = np.corrcoef(df[cols].values.T)
-	sns.set(font_scale=1.25)
-	hm = sns.heatmap(cm, cbar=True, annot=True, square=True, fmt='.2f', annot_kws={'size': 10}, yticklabels=cols.values, xticklabels=cols.values)
-	plt.show()
-
-
-def plotNormalityTest(df,col):
-	sns.distplot(df[col], fit=norm);
-	fig = plt.figure()
-	res = stats.probplot(df[col], plot=plt)
-    
-    
-def plot2dHist(df, col1, col2):
-	with sns.axes_style('white'):
-	    sns.jointplot(col1, col2, df, kind='hex');  
-    
+exec(open("01_code/prod/P3_functions.py").read())
 
 ####################################
 #--       ENTRY POINT       
@@ -150,7 +101,7 @@ feats = [x  for x in df.columns if x not in targ_cols]
 new_feat_names = ['feat_'+str(i) for i in np.arange(1,len(feats)+1,1)]
 
 #-- Create look up of feature names
-feat_lut = pd.DataFrame(zip(feats,new_feat_names), columns = ["old_feat_name","new_feat_name"])
+feat_lut = pd.DataFrame(list(zip(feats,new_feat_names)), columns = ["old_feat_name","new_feat_name"])
 
 #-- Rename column names
 df = df[feats]
@@ -180,7 +131,7 @@ df.to_csv(data_output_dir+'preprop_'+pair+'_targ_'+target+'_SL_'+str(SL)+'_SPREA
 #--       FEATURE SELECTION
 ####################################
 
-from feature_selector import FeatureSelector
+
 
 #-- Separate features from labels
 y = df['target']
@@ -190,15 +141,44 @@ df_feats = df.drop(columns = ['target'])
 #-- Create an instance
 fs = FeatureSelector(data = df_feats, labels = train_labels)
 
-#-- Identify useless features
-fs.identify_all(selection_params = {'missing_threshold': 0.6, 'correlation_threshold': 0.98, 
+#-- Identify redundant features
+if(USE_LEARNER_FOR_FEATURE_SELECTION):
+    # NOT COMPLETE
+    fs.identify_all(selection_params = {'missing_threshold': 0.6, 'correlation_threshold': 0.98, 
                                     'task': 'classification', 'eval_metric': 'auc', 
                                      'cumulative_importance': 0.99})
+    #-- Get valuable features   
+    X = fs.remove(methods = 'all', keep_one_hot = True)
+
+else:
+    #-- Features with missing values greater than threshold 
+    fs.identify_missing(missing_threshold = MISSING_VALUE_THRESHOLD)
+    #-- Correlated features
+    fs.identify_collinear(correlation_threshold = CORRELATION_THRESHOLD)
+    #-- Single unique value
+    fs.identify_single_unique()
     
-#-- Get valuable features   
-X = fs.remove(methods = 'all', keep_one_hot = True)
+    #-- TO get keys fs.ops.keys()
+    missing_features = list(fs.ops['missing'])
+    corelated_features = list(fs.ops['collinear'])
+    single_value = list(fs.ops['single_unique'])
+    
+    r = set(flatten([missing_features,corelated_features,single_value]))
+    #X = df_feats.drop(r, axis=1)    
+    
+
+     
+rnk_pval = getPvalStats(df, 'target')    
+    
 #-- Drop time
-X.drop(columns=["feat_2384"],inplace =True)
+df_feats.drop(columns=["feat_2384"],inplace =True)
+#-- Drop low pval
+cols = list(rnk_pval.iloc[2:NFEAT_PVAL+2,1])
+X = df_feats[df_feats.columns.intersection(cols)]
+
+
+
+
 filt_feat_names = X.columns
 
 y = df['target'] 
@@ -218,25 +198,158 @@ df_preprop.to_csv(data_output_dir+'preprop_featsel_'+pair+'_targ_'+target+'_SL_'
 ####################################
 #--       PREPROCESSING
 ####################################
-from sklearn.preprocessing import StandardScaler
 
+#-- Scale features
 scaler = StandardScaler()
 scaler.fit(X)
+X_scaled = pd.DataFrame(scaler.transform(X), columns = X.columns)
 
-X = scaler.transform(X)
+#-- Convert target to boolean
+y_boolean = y == "True"
 
-#-- Convert to boolean
-y = y == "True"
+
 
 
 ####################################
 #--       MODELING
 ####################################
+#-- Inputs
+#
+# X: Feature selected unscaled features
+# X_scaled: Feature selected scaled features
+#
+# y_int : Target in integer form (0,1)
+# y_boolean: Target in boolean form
+# y: Target in string form
+
+
+
+#-- Splitting CV and test
+#-- Total rows
+N_tot = len(X)
+#-- Test size
+N_test = round(TEST_PORTION*N_tot)
+#-- Fune tuning for CV size
+N_trn = N_CV*round((N_tot-N_test)/N_CV)
+#-- Updating test size
+N_test = N_tot-N_trn
+
+#-- Splitting train and test
+X_trn = X.iloc[0:N_trn,:]
+X_tst = X.iloc[N_trn:X.shape[0],:]
+
+X_scaled_trn = X_scaled.iloc[0:N_trn,:]
+X_scaled_tst = X_scaled.iloc[N_trn:X.shape[0],:]
+
+y_trn = y[0:N_trn]
+y_tst = y[N_trn:X.shape[0]]
+
+y_int_trn = y_int[0:N_trn]
+y_int_tst = y_int[N_trn:X.shape[0]]
+
+y_boolean_trn = y_boolean[0:N_trn]
+y_boolean_tst = y_boolean[N_trn:X.shape[0]]
+
+
+
+
+#-- Create cv instance
+cvsett = CvSettings(N_CV,k_CV)
+#-- Get combinatoral matrices
+cvFlags, nPaths, cvMask = cvsett.getCVLabel(N_trn,N_CV,k_CV)
+#-- Set index to linspace
+cvMask.index = range(cvMask.shape[0])
+
+cvProb = cvMask.copy()
+cvTruth = cvProb.copy()
+
+
+exec(open("01_code/prod/P3_functions.py").read())
+xgb_mdl = FxModels("xgboost")
+lgb_mdl = FxModels("lightgbm")
+cat_mdl = FxModels("catboost")
+rfo_mdl = FxModels("randomforest")
+glm_mdl = FxModels("glm")
+dl_mdl = FxModels("deeplearning")
+
+i=0
+while (i<len(cvMask.columns)):
+    
+    print(i)
+    #-- Train test indicies
+    tst_inds = cvMask.iloc[:,i]>0
+    trn_inds = cvMask.iloc[:,i]<1
+    
+    #-- Test
+    x_cv_tst = X_scaled_trn.loc[ tst_inds ,:]
+    y_cv_tst = y_int_trn[ tst_inds ]
+    
+    #-- Train
+    x_cv_trn = X_scaled_trn.loc[ trn_inds ,:]
+    y_cv_trn = y_int_trn[ trn_inds ]
+    
+    #-- XGboost
+    #clf = xgb_mdl.xgb_model( x_cv_trn, y_cv_trn)
+    #y_pred = xgb_mdl.xgb_predict(clf, x_cv_tst)
+
+    #-- LGB    
+    #clf = lgb_mdl.lgb_model( x_cv_trn, y_cv_trn)
+    #y_pred = lgb_mdl.lgb_predict(clf, x_cv_tst)
+    
+    #-- Catboost
+    clf = cat_mdl.cat_model( x_cv_trn, y_cv_trn)
+    y_pred = cat_mdl.cat_predict(clf, x_cv_tst)
+    
+    
+    #-- RandomForest
+    #clf = rfo_mdl.rfo_model( x_cv_trn, y_cv_trn)
+    #y_pred = rfo_mdl.rfo_predict(clf, x_cv_tst)
+    
+    
+    #-- GLM
+    #clf = glm_mdl.glm_model( x_cv_trn, y_cv_trn)
+    #y_pred = glm_mdl.rfo_predict(clf, x_cv_tst)
+
+
+    #-- Deep learning
+    #clf = dl_mdl.dl_model( x_cv_trn, y_cv_trn.values)
+    #y_pred = dl_mdl.dl_predict(clf, x_cv_tst)
+
+    #-- Setting predictions and truth
+    cvProb.loc[tst_inds,i+1] = y_pred.reshape((len(y_pred),))
+    cvTruth.loc[tst_inds,i+1] =y_cv_tst
+    
+
+    i=i+1
+
+
+#-- Get path metrics
+DECISION_THRESHOLD = 0.5
+sharpe_vec,drawdown_vec,drawup_vec,pl_eq_vec= cvsett.getPathMetrics( cvProb, y_int_trn, DECISION_THRESHOLD , cvFlags)
+
+print(np.mean(sharpe_vec))
+
+
+plt.plot(pl_eq_vec[0])
+
+
+
+
+#-- XGBoost sample code
+    #-- Put in XGBoost format
+    #xgtrain = xgboost.DMatrix(x_cv_trn, y_cv_trn)
+    #xgtest = xgboost.DMatrix(x_cv_tst, y_cv_tst)
+    
+    #param = {'max_depth':2, 'silent':1, 'colsample_bytree':0.1, 'eta':0.01, 'subsample':0.2,  'objective':'binary:logistic'}
+    #num_round = 1000
+    #bst = xgboost.train(param, xgtrain, num_round)
+    #y_pred = bst.predict(xgtest)
+
 
 
 #---------------------------------------------------------------------------
 
-import xgboost
+
 
 data_dmatrix = xgboost.DMatrix(data=X,label=y.values)
    

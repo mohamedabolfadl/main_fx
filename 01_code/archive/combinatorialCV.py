@@ -96,7 +96,7 @@ nPaths = x[1]
 cvmRes = x[0]
 
 
-#-- Probability of the model 
+#-- Get metrics per path
 # simProb  T x CV_length matrix with probabilities in the cells of paths
 # simTruth T x 1 vector with 1 and -1
 # p        [0,1] scalar for threshold of decision
