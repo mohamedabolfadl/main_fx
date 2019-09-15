@@ -29,6 +29,13 @@ from feature_selector import FeatureSelector
 from sklearn.preprocessing import StandardScaler
 import xgboost
 
+pd.set_option('display.max_rows', 100)
+pd.set_option('display.max_columns', 20)
+pd.set_option('display.width', 1000)
+
+path = 'C:/Users/Mohamed Ibrahim/Box Sync/FX_DATASCIENCE/main_fx'
+
+
 ####################################
 #--       INPUT VARIABLES       
 ####################################
@@ -60,7 +67,6 @@ CORRELATION_THRESHOLD = 0.8
 #-- Portion to test the model
 TEST_PORTION = 0.1
 
-path = 'C:/Users/Mohamed Ibrahim/Box Sync/FX_DATASCIENCE/main_fx'
 
 #-- Run inputs
 SPREAD = 1 # [1,2,3]
