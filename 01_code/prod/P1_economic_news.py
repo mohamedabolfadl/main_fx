@@ -77,6 +77,7 @@ else:
             df = f.copy()
         else:
             df = df.append(f)
+        i=i+1
     df.columns = ['date','time','country','impact','news_label','actual_vs_real','units','actual','forecast','previous']
     df.to_csv(data_input_dir+'combined_eco_news.csv')
 
@@ -117,7 +118,7 @@ dt.loc[ ~dt.dumm_news_label.isin(nws_lbl.index) ,'dumm_news_label'] = 'other_nws
 #-- Clean previous
 dt.loc[ dt.previous.str.contains("([a-zA-Z]|\')") & dt.previous.notnull(),'previous'] = np.NaN
 dt.loc[ :,'previous'] = df.previous.apply(pd.to_numeric, args=('coerce',))
-
+dt.loc[ :,'actual'] = df.actual.apply(pd.to_numeric, args=('coerce',))
 
 #-- Fill empty actual vs real
 dt.loc[ dt.actual_vs_real.isnull() & dt.actual.notnull() & dt.previous.notnull() ,'actual_vs_real'] = dt.loc[ dt.actual_vs_real.isnull() & dt.actual.notnull() & dt.previous.notnull(),'actual'] > dt.loc[ dt.actual_vs_real.isnull() & dt.actual.notnull() & dt.previous.notnull(),'previous']
@@ -168,6 +169,12 @@ dt_agg_planned = dt_agg_planned.rename(columns = {'date_join_planned':'date_join
 
 res = pd.merge(pd.merge(dt_agg_res,dt_agg_cnt, how = 'outer'), dt_agg_planned, how = 'outer')
 
+
+#-- Append hour to the date for joining
+if(START_HOUR<10):
+    res.loc[:,'Time'] = res.loc[:,'date_join'].map(str)+' 0'+str(START_HOUR)+':00:00'
+else:
+    res.loc[:,'Time'] = res.loc[:,'date_join'].map(str)+' '+str(START_HOUR)+':00:00'
 
 ####################################
 #--       DUMP      

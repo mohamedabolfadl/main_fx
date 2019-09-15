@@ -38,6 +38,12 @@ STARTHOUR = 9
 pairs = ['eurusd']
 
 
+#-- Standard training
+#SPREAD = 1 
+#MAXTRADETIME = 8 
+#SL = 30 # [10,20,30]
+#STARTHOUR = 9
+#pair = 'eurusd'
 
 ####################################
 #--       IMPORT LIBRARIES       
@@ -55,6 +61,13 @@ import os
 #--       ENTRY POINT       
 ####################################
 
+
+                
+print('Reading economic news...')
+eco_news = pd.read_csv(data_intermediate_dir+'economic_news_STARTHOUR_'+str(STARTHOUR)+'.csv')
+
+
+
 #-- Change to project directory
 os.chdir(path)
 
@@ -66,13 +79,14 @@ for pair in pairs:
     for SL in SL_VEC:
             for SPREAD in SPREAD_VEC:
                 for MAXTRADETIME in MAXTRADETIME_VEC:
-                
-                
                     print('Reading labels...')
                     d_l = pd.read_csv(data_output_dir + pair+'_labels_SL_'+str(SL)+'_SPREAD_'+str(SPREAD)+'_MAXTRADETIME_'+str(MAXTRADETIME)+'.csv')
                     
-                    #-- Join on time
+                    #-- Join labels
                     d = d_f.merge(d_l,on ="Time", how = "left")
+                    
+                    #-- Join economic news
+                    d = d.merge(eco_news, on = "Time", how = "left")
 
                     #-- Write to csv
                     d.to_csv(data_output_dir+'ml_ready_'+pair+'_SL_'+str(SL)+'_SPREAD_'+str(SPREAD)+'_MAXTRADETIME_'+str(MAXTRADETIME)+'.csv')

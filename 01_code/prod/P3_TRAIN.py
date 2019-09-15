@@ -57,10 +57,10 @@ TEST_FEATURE_SELECTION =False
 N_CV = 6
 k_CV = 2
 DECISION_THRESHOLD = 0.6
-NFEAT_PVAL = 80
+NFEAT_PVAL = 800
 
 #-- Feature selection maximum missing values
-MISSING_VALUE_THRESHOLD = 0.05
+MISSING_VALUE_THRESHOLD = 0.10
 #-- Feature selection maximum correlation between variables
 CORRELATION_THRESHOLD = 0.8
 
@@ -75,7 +75,7 @@ SL = 30 # [10,20,30]
 STARTHOUR = 9
 pair = 'eurusd'
 target = 'sell'
-
+start_date = '2011-01-01 00:00:00'
 
 ####################################
 #--       FUNCTION DEFINITIONS
@@ -92,6 +92,10 @@ os.chdir(path)
 
 #-- Load data
 df = pd.read_csv(data_output_dir+'ml_ready_'+pair+'_SL_'+str(SL)+'_SPREAD_'+str(SPREAD)+'_MAXTRADETIME_'+str(MAXTRADETIME)+'.csv', low_memory=False)
+
+#-- Filter dates
+df = df.loc[df.Time>start_date,:]
+
 
 #-- Get target column
 targ_col = df[target]
@@ -175,9 +179,17 @@ else:
 
      
 rnk_pval = getPvalStats(df, 'target')    
-    
+
+
+feat_types = pd.DataFrame(df_feats.dtypes)
+feat_types.columns = ['type']
+feat_types = feat_types.reset_index()
+drp_cls = feat_types.loc[feat_types.type!='float64','index']
+
 #-- Drop time
-df_feats.drop(columns=["feat_2384"],inplace =True)
+#df_feats.drop(columns=["feat_2384"],inplace =True)
+df_feats.drop(columns=drp_cls.values,inplace =True)
+
 #-- Drop low pval
 cols = list(rnk_pval.iloc[2:NFEAT_PVAL+2,1])
 X = df_feats[df_feats.columns.intersection(cols)]
@@ -295,16 +307,16 @@ while (i<len(cvMask.columns)):
     y_cv_trn = y_int_trn[ trn_inds ]
     
     #-- XGboost
-    #clf = xgb_mdl.xgb_model( x_cv_trn, y_cv_trn)
-    #y_pred = xgb_mdl.xgb_predict(clf, x_cv_tst)
+    clf = xgb_mdl.xgb_model( x_cv_trn, y_cv_trn)
+    y_pred = xgb_mdl.xgb_predict(clf, x_cv_tst)
 
     #-- LGB    
     #clf = lgb_mdl.lgb_model( x_cv_trn, y_cv_trn)
     #y_pred = lgb_mdl.lgb_predict(clf, x_cv_tst)
     
     #-- Catboost
-    clf = cat_mdl.cat_model( x_cv_trn, y_cv_trn)
-    y_pred = cat_mdl.cat_predict(clf, x_cv_tst)
+    #clf = cat_mdl.cat_model( x_cv_trn, y_cv_trn)
+    #y_pred = cat_mdl.cat_predict(clf, x_cv_tst)
     
     
     #-- RandomForest

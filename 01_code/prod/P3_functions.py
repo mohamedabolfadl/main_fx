@@ -126,6 +126,9 @@ class FxModels:
 
     #-- Train xgb model        
     def xgb_model(self, train_data, train_label):
+        #train_data = 
+        #train_data.fillna(train_data.median(), inplace = True)
+        #train_data.dropna(axis=1, how='all', inplace = True)
         self.xgb_mdl = xgb.XGBClassifier(max_depth=self.xgb_params['max_depth'],
                            min_child_weight=self.xgb_params['min_child_weight'],
                            learning_rate=self.xgb_params['learning_rate'],
